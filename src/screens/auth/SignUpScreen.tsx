@@ -66,9 +66,12 @@ const SignUpScreen = ({ navigation }: Props) => {
         }
         try {
             setIsLoading(true);
-            const data = await register({ email, password, fullName, studentId });
-            console.log('Sign Up:', data);
-            await saveUserToStore(data);
+            // Step 1: Register the account
+            await register({ email, password, fullName, studentId });
+            // Step 2: Auto-login to get token + user profile
+            const { login: loginApi } = await import('../../services/authService');
+            const authData = await loginApi({ email, password });
+            await saveUserToStore(authData);
             navigation.navigate('LinkThirdParty');
         } catch (error) {
             console.log(error);

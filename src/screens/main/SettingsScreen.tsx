@@ -7,7 +7,8 @@ import {
     Image,
     StatusBar,
     Switch,
-    Alert,
+    Modal,
+    Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
@@ -17,36 +18,13 @@ import { RootStackParamList } from '@/navigation/AppNavigator';
 import { useUserStore } from '@/utils/stores/userStore';
 import { showSuccess } from '@/utils/toast';
 
-const SettingsScreen = () => {
-    const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-    const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-    const { userInfo, logout } = useUserStore();
+// ==================== Memoized Components ====================
 
-    const handleLogout = () => {
-        Alert.alert(
-            'Logout',
-            'Are you sure you want to logout?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Logout',
-                    style: 'destructive',
-                    onPress: async () => {
-                        await logout();
-                        showSuccess('You have been logged out', 'Goodbye');
-                        navigation.reset({
-                            index: 0,
-                            routes: [{ name: 'SignIn' }],
-                        });
-                    },
-                },
-            ]
-        );
-    };
-
-    const SettingItem = ({
+/** Reusable settings row item with icon, title, subtitle, and optional right element */
+const SettingItem = React.memo(
+    ({
         icon,
-        iconColor,
+        iconColor = '#7C3AED',
         title,
         subtitle,
         onPress,
@@ -69,20 +47,42 @@ const SettingsScreen = () => {
         >
             <View
                 className="w-10 h-10 rounded-xl items-center justify-center"
-                style={{ backgroundColor: (iconColor || '#7C3AED') + '20' }}
+                style={{ backgroundColor: iconColor + '20' }}
             >
-                <Feather name={icon as any} size={20} color={iconColor || '#7C3AED'} />
+                <Feather name={icon as any} size={20} color={iconColor} />
             </View>
             <View className="flex-1 ml-3">
                 <Text className="text-white text-base font-medium">{title}</Text>
-                {subtitle && <Text className="text-gray-500 text-xs mt-0.5">{subtitle}</Text>}
+                {subtitle && (
+                    <Text className="text-gray-500 text-xs mt-0.5">{subtitle}</Text>
+                )}
             </View>
             {rightElement}
             {showChevron && !rightElement && (
-                <Feather name="chevron-right" size={20} color="#64748B" />
+                <Feather name="chevron-right" size={20} color="#475569" />
             )}
         </TouchableOpacity>
-    );
+    ),
+);
+
+// ==================== Main Component ====================
+
+const SettingsScreen = () => {
+    const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const { userInfo, logout } = useUserStore();
+
+    /** Handle logout with custom dark modal instead of native Alert */
+    const confirmLogout = async () => {
+        setShowLogoutModal(false);
+        await logout();
+        showSuccess('See you next time! 👋', 'Logged Out');
+        navigation.reset({
+            index: 0,
+            routes: [{ name: 'SignIn' }],
+        });
+    };
 
     return (
         <SafeAreaView className="flex-1 bg-[#101922]" edges={['top']}>
@@ -93,14 +93,14 @@ const SettingsScreen = () => {
                 contentContainerStyle={{ paddingBottom: 100 }}
                 showsVerticalScrollIndicator={false}
             >
-                {/* Header */}
+                {/* ── Header ── */}
                 <View className="px-4 py-3">
                     <Text className="text-white text-2xl font-bold">Settings</Text>
                 </View>
 
-                {/* Profile Card */}
+                {/* ── Profile Card ── */}
                 <View className="px-4 mb-6">
-                    <View className="bg-[#1A2332] rounded-2xl p-4 border border-[#334155]">
+                    <View className="bg-[#1A2332] rounded-2xl p-4">
                         <View className="flex-row items-center">
                             <View className="relative">
                                 <Image
@@ -113,29 +113,32 @@ const SettingsScreen = () => {
                             </View>
                             <View className="flex-1 ml-4">
                                 <Text className="text-white text-xl font-bold">
-                                    {userInfo?.full_name || 'User'}
+                                    {userInfo?.fullName || 'User'}
                                 </Text>
                                 <Text className="text-gray-400 text-sm mt-0.5">
                                     {userInfo?.email || 'user@example.com'}
                                 </Text>
                                 <View className="flex-row items-center gap-1 mt-1">
-                                    <MaterialIcons name="badge" size={14} color="#7C3AED" />
+                                    <MaterialIcons name="badge" size={14} color="#A78BFA" />
                                     <Text className="text-gray-500 text-xs">
-                                        {userInfo?.student_id || 'SE171234'}
+                                        {userInfo?.studentId || 'SE171234'}
                                     </Text>
                                 </View>
                             </View>
                         </View>
 
-                        <TouchableOpacity activeOpacity={0.8} className="mt-4 bg-[#7C3AED] rounded-xl py-3 items-center">
+                        <TouchableOpacity
+                            activeOpacity={0.8}
+                            className="mt-4 bg-[#7C3AED] rounded-xl py-3 items-center"
+                        >
                             <Text className="text-white text-sm font-semibold">Edit Profile</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
 
-                {/* Account Settings */}
+                {/* ── Account ── */}
                 <View className="px-4">
-                    <Text className="text-gray-500 text-xs font-semibold mb-2 ml-1">ACCOUNT</Text>
+                    <Text className="text-gray-600 text-xs font-semibold mb-2 ml-1">ACCOUNT</Text>
                     <SettingItem
                         icon="lock"
                         iconColor="#06B6D4"
@@ -152,9 +155,11 @@ const SettingsScreen = () => {
                     />
                 </View>
 
-                {/* Preferences */}
+                {/* ── Preferences ── */}
                 <View className="px-4 mt-6">
-                    <Text className="text-gray-500 text-xs font-semibold mb-2 ml-1">PREFERENCES</Text>
+                    <Text className="text-gray-600 text-xs font-semibold mb-2 ml-1">
+                        PREFERENCES
+                    </Text>
                     <SettingItem
                         icon="bell"
                         iconColor="#EAB308"
@@ -165,16 +170,16 @@ const SettingsScreen = () => {
                             <Switch
                                 value={notificationsEnabled}
                                 onValueChange={setNotificationsEnabled}
-                                trackColor={{ false: '#334155', true: '#7C3AED60' }}
-                                thumbColor={notificationsEnabled ? '#7C3AED' : '#64748B'}
+                                trackColor={{ false: '#243447', true: '#7C3AED60' }}
+                                thumbColor={notificationsEnabled ? '#7C3AED' : '#475569'}
                             />
                         }
                     />
                 </View>
 
-                {/* Support */}
+                {/* ── Support ── */}
                 <View className="px-4 mt-6">
-                    <Text className="text-gray-500 text-xs font-semibold mb-2 ml-1">SUPPORT</Text>
+                    <Text className="text-gray-600 text-xs font-semibold mb-2 ml-1">SUPPORT</Text>
                     <SettingItem
                         icon="help-circle"
                         iconColor="#94A3B8"
@@ -190,18 +195,73 @@ const SettingsScreen = () => {
                     />
                 </View>
 
-                {/* Logout */}
+                {/* ── Logout Button ── */}
                 <View className="px-4 mt-8">
                     <TouchableOpacity
-                        onPress={handleLogout}
+                        onPress={() => setShowLogoutModal(true)}
                         activeOpacity={0.8}
-                        className="bg-red-500/15 rounded-xl p-3 border border-red-500/25 flex-row items-center justify-center gap-2"
+                        className="bg-red-500/10 rounded-xl p-3 flex-row items-center justify-center gap-2"
                     >
                         <Feather name="log-out" size={20} color="#EF4444" />
                         <Text className="text-red-400 text-base font-semibold">Logout</Text>
                     </TouchableOpacity>
                 </View>
             </ScrollView>
+
+            {/* ═══════════════════════════════════════════════════
+                Custom Dark Logout Modal (replaces native Alert)
+               ═══════════════════════════════════════════════════ */}
+            <Modal
+                visible={showLogoutModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowLogoutModal(false)}
+            >
+                {/* Dim backdrop — tap to dismiss */}
+                <Pressable
+                    onPress={() => setShowLogoutModal(false)}
+                    className="flex-1 bg-black/60 items-center justify-center px-8"
+                >
+                    {/* Modal card — stopPropagation so taps inside don't close */}
+                    <Pressable
+                        onPress={() => { }}
+                        className="bg-[#1A2332] rounded-2xl w-full p-6"
+                    >
+                        {/* Icon */}
+                        <View className="items-center mb-4">
+                            <View className="w-16 h-16 rounded-full bg-red-500/15 items-center justify-center">
+                                <Feather name="log-out" size={28} color="#EF4444" />
+                            </View>
+                        </View>
+
+                        {/* Title + Subtitle */}
+                        <Text className="text-white text-xl font-bold text-center mb-2">
+                            Log out?
+                        </Text>
+                        <Text className="text-gray-400 text-sm text-center mb-6">
+                            You'll need to sign in again to access your projects and team.
+                        </Text>
+
+                        {/* Buttons */}
+                        <View className="flex-row gap-3">
+                            <TouchableOpacity
+                                onPress={() => setShowLogoutModal(false)}
+                                activeOpacity={0.8}
+                                className="flex-1 bg-white/5 rounded-xl py-3.5 items-center"
+                            >
+                                <Text className="text-white font-semibold">Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                onPress={confirmLogout}
+                                activeOpacity={0.8}
+                                className="flex-1 bg-red-500 rounded-xl py-3.5 items-center"
+                            >
+                                <Text className="text-white font-semibold">Log out</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };

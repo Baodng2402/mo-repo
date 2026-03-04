@@ -1,24 +1,39 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AuthResponse } from '../../services/authService';
+import type { AuthResponse, UserProfile } from '../../services/authService';
+
+// ==================== Types ====================
+
 interface UserState {
-  userInfo: AuthResponse['user'] | null;
+  /** Current user info (null = not logged in) */
+  userInfo: UserProfile | null;
+
+  /** True if user has an active session */
   isAuthenticated: boolean;
 
-  // Actions
+  /** Save user data after login/OAuth */
   login: (data: AuthResponse) => Promise<void>;
+
+  /** Clear all session data */
   logout: () => Promise<void>;
 }
 
+// ==================== Store ====================
+
+/**
+ * Zustand store for user authentication state.
+ * Persisted to AsyncStorage so user stays logged in between app restarts.
+ * JWT token is stored separately in AsyncStorage under 'access_token'.
+ */
 export const useUserStore = create<UserState>()(
   persist(
     (set) => ({
       userInfo: null,
       isAuthenticated: false,
 
-      // --- LOGIC LƯU TRỮ Ở ĐÂY ---
       login: async (data: AuthResponse) => {
+        // Save JWT token for axios interceptor
         await AsyncStorage.setItem('access_token', data.access_token);
         set({
           userInfo: data.user,
@@ -34,6 +49,7 @@ export const useUserStore = create<UserState>()(
     {
       name: 'user-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      // Only persist these fields (not functions)
       partialize: (state) => ({
         userInfo: state.userInfo,
         isAuthenticated: state.isAuthenticated,
