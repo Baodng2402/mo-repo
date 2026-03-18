@@ -13,13 +13,17 @@ import {
     FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+import { Feather } from '@/components/icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 
-import { createGroup, updateGroup, getGroupById } from '@/services/groupService';
-import { getRepositories, type GitHubRepo } from '@/services/githubService';
+import { createGroup, updateGroup, getGroupById, linkRepoToGroup } from '@/services/groupService';
+import {
+    getRepositories,
+    createRepository,
+    type GitHubRepo,
+} from '@/services/githubService';
 import { showSuccess, showError } from '@/utils/toast';
 import type { RootStackParamList } from '@/navigation/AppNavigator';
 
@@ -71,8 +75,8 @@ const FORM_FIELDS: FormField[] = [
     },
     {
         key: 'github_repo_url',
-        label: 'GitHub Repository URL',
-        placeholder: 'https://github.com/org/repo',
+        label: 'GitHub Repository',
+        placeholder: 'Select or create a repository',
         maxLength: 255,
         icon: 'github',
         isSelect: true,
@@ -103,11 +107,21 @@ const CreateGroupScreen = () => {
     const [loadingGroup, setLoadingGroup] = useState(false);
     const [focusedField, setFocusedField] = useState<string | null>(null);
 
+    // GitHub repos state
     const [repos, setRepos] = useState<GitHubRepo[]>([]);
     const [loadingRepos, setLoadingRepos] = useState(false);
     const [isRepoModalVisible, setRepoModalVisible] = useState(false);
 
-    // ── Load User Repositories ──────────────
+    // Selected repo metadata (for linking after group creation)
+    const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null);
+
+    // Create new repo state
+    const [showCreateRepo, setShowCreateRepo] = useState(false);
+    const [newRepoName, setNewRepoName] = useState('');
+    const [newRepoDesc, setNewRepoDesc] = useState('');
+    const [creatingRepo, setCreatingRepo] = useState(false);
+
+    // ── Load Group (edit mode) ──────────────
 
     useEffect(() => {
         if (isEditMode && editGroupId) {
@@ -134,6 +148,8 @@ const CreateGroupScreen = () => {
         }
     }, [isEditMode, editGroupId, navigation]);
 
+    // ── Load User Repositories ──────────────
+
     useEffect(() => {
         const fetchRepos = async () => {
             try {
@@ -142,13 +158,67 @@ const CreateGroupScreen = () => {
                 setRepos(data.repositories || []);
             } catch (error) {
                 console.error('Failed to load GitHub repos:', error);
-                // Non-blocking error, user can still type or skip if they want
             } finally {
                 setLoadingRepos(false);
             }
         };
         fetchRepos();
     }, []);
+
+    // ── Create New Repository ───────────────
+
+    const handleCreateRepo = async () => {
+        if (!newRepoName.trim()) {
+            showError('Repository name is required');
+            return;
+        }
+
+        try {
+            setCreatingRepo(true);
+            const result = await createRepository({
+                name: newRepoName.trim(),
+                description: newRepoDesc.trim() || undefined,
+            });
+
+            // Add to local repos list
+            const newRepo: GitHubRepo = {
+                id: result.id,
+                name: result.name,
+                full_name: result.full_name,
+                private: result.private,
+                html_url: result.html_url,
+                updated_at: new Date().toISOString(),
+            };
+            setRepos((prev) => [newRepo, ...prev]);
+
+            // Select it
+            setSelectedRepo(newRepo);
+            updateField('github_repo_url', newRepo.html_url);
+
+            showSuccess(`Repository "${result.name}" created!`);
+            setShowCreateRepo(false);
+            setRepoModalVisible(false);
+            setNewRepoName('');
+            setNewRepoDesc('');
+        } catch (error: any) {
+            showError(error.response?.data?.message || 'Failed to create repository');
+        } finally {
+            setCreatingRepo(false);
+        }
+    };
+
+    // ── Select Existing Repo ────────────────
+
+    const handleSelectRepo = (repo: GitHubRepo | null) => {
+        if (!repo || repo.id === -1) {
+            setSelectedRepo(null);
+            updateField('github_repo_url', '');
+        } else {
+            setSelectedRepo(repo);
+            updateField('github_repo_url', repo.html_url);
+        }
+        setRepoModalVisible(false);
+    };
 
     // ── Submit ──────────────────────────────────────
 
@@ -173,7 +243,22 @@ const CreateGroupScreen = () => {
                 await updateGroup(editGroupId, payload);
                 showSuccess('Group updated successfully');
             } else {
-                await createGroup(payload as any);
+                const group = await createGroup(payload as any);
+
+                // Auto-link repo to group if one is selected
+                if (selectedRepo && group?.id) {
+                    try {
+                        const [owner, repoName] = selectedRepo.full_name.split('/');
+                        await linkRepoToGroup(group.id, {
+                            repo_url: selectedRepo.html_url,
+                            repo_name: repoName || selectedRepo.name,
+                            repo_owner: owner || '',
+                        });
+                    } catch (linkError: any) {
+                        console.warn('Failed to link repo to group:', linkError.message);
+                    }
+                }
+
                 showSuccess('Group created successfully');
             }
 
@@ -230,6 +315,7 @@ const CreateGroupScreen = () => {
                 >
                     {FORM_FIELDS.map((field) => {
                         const isFocused = focusedField === field.key;
+                        const isGitHub = field.isSelect && field.key === 'github_repo_url';
 
                         return (
                             <View key={field.key} className="mb-4">
@@ -250,26 +336,43 @@ const CreateGroupScreen = () => {
                                     </Text>
                                 </View>
 
-                                <TextInput
-                                    value={formData[field.key] || ''}
-                                    onChangeText={(value) => updateField(field.key, value)}
-                                    onFocus={() => setFocusedField(field.key)}
-                                    onBlur={() => setFocusedField(null)}
-                                    placeholder={field.placeholder}
-                                    placeholderTextColor="#475569"
-                                    maxLength={field.maxLength}
-                                    multiline={field.multiline}
-                                    numberOfLines={field.multiline ? 4 : 1}
-                                    textAlignVertical={field.multiline ? 'top' : 'center'}
-                                    className={`bg-[#1A2332] rounded-xl px-4 text-white text-sm border ${isFocused ? 'border-[#7C3AED]' : 'border-white/10'
-                                        } ${field.multiline ? 'py-3 min-h-[100px]' : 'h-12'}`}
-                                    autoCapitalize="none"
-                                />
-
-                                {field.isSelect && field.key === 'github_repo_url' && (
+                                {isGitHub ? (
+                                    // GitHub repo selector button
                                     <TouchableOpacity
-                                        className="absolute inset-0"
                                         onPress={() => setRepoModalVisible(true)}
+                                        className={`bg-[#1A2332] rounded-xl px-4 h-12 border justify-center ${isFocused ? 'border-[#7C3AED]' : 'border-white/10'
+                                            }`}
+                                    >
+                                        <View className="flex-row items-center justify-between">
+                                            <Text
+                                                className={`text-sm ${formData[field.key]
+                                                    ? 'text-white'
+                                                    : 'text-[#475569]'
+                                                    }`}
+                                                numberOfLines={1}
+                                            >
+                                                {selectedRepo
+                                                    ? selectedRepo.full_name
+                                                    : field.placeholder}
+                                            </Text>
+                                            <Feather name="chevron-down" size={16} color="#64748B" />
+                                        </View>
+                                    </TouchableOpacity>
+                                ) : (
+                                    <TextInput
+                                        value={formData[field.key] || ''}
+                                        onChangeText={(value) => updateField(field.key, value)}
+                                        onFocus={() => setFocusedField(field.key)}
+                                        onBlur={() => setFocusedField(null)}
+                                        placeholder={field.placeholder}
+                                        placeholderTextColor="#475569"
+                                        maxLength={field.maxLength}
+                                        multiline={field.multiline}
+                                        numberOfLines={field.multiline ? 4 : 1}
+                                        textAlignVertical={field.multiline ? 'top' : 'center'}
+                                        className={`bg-[#1A2332] rounded-xl px-4 text-white text-sm border ${isFocused ? 'border-[#7C3AED]' : 'border-white/10'
+                                            } ${field.multiline ? 'py-3 min-h-[100px]' : 'h-12'}`}
+                                        autoCapitalize="none"
                                     />
                                 )}
 
@@ -312,49 +415,158 @@ const CreateGroupScreen = () => {
                 </View>
             </KeyboardAvoidingView>
 
-            {/* GitHub Repo Selection Modal */}
+            {/* ═══════ GitHub Repo Selection Modal ═══════ */}
             <Modal
                 visible={isRepoModalVisible}
                 animationType="slide"
                 transparent={true}
-                onRequestClose={() => setRepoModalVisible(false)}
+                onRequestClose={() => {
+                    setRepoModalVisible(false);
+                    setShowCreateRepo(false);
+                }}
             >
                 <View className="flex-1 bg-black/50 justify-end">
-                    <View className="bg-[#101922] rounded-t-3xl border-t border-white/10" style={{ maxHeight: '80%' }}>
+                    <View className="bg-[#101922] rounded-t-3xl border-t border-white/10" style={{ maxHeight: '85%' }}>
+                        {/* Modal Header */}
                         <View className="flex-row justify-between items-center p-4 border-b border-white/10">
-                            <Text className="text-white text-lg font-bold">Select Repository</Text>
-                            <TouchableOpacity onPress={() => setRepoModalVisible(false)} className="p-2">
+                            <Text className="text-white text-lg font-bold">
+                                {showCreateRepo ? 'Create Repository' : 'Select Repository'}
+                            </Text>
+                            <TouchableOpacity
+                                onPress={() => {
+                                    setRepoModalVisible(false);
+                                    setShowCreateRepo(false);
+                                }}
+                                className="p-2"
+                            >
                                 <Feather name="x" size={24} color="#fff" />
                             </TouchableOpacity>
                         </View>
 
-                        {loadingRepos ? (
-                            <View className="py-10 items-center justify-center">
-                                <ActivityIndicator size="large" color="#7C3AED" />
-                            </View>
-                        ) : (
-                            <FlatList
-                                data={[{ id: -1, name: 'None', html_url: '' } as any, ...repos]}
-                                keyExtractor={(item) => item.id.toString()}
-                                contentContainerStyle={{ padding: 16 }}
-                                showsVerticalScrollIndicator={false}
-                                renderItem={({ item }) => (
+                        {showCreateRepo ? (
+                            // ── Create New Repo Form ──
+                            <View className="p-4">
+                                <View className="mb-4">
+                                    <Text className="text-gray-400 text-sm font-medium mb-2">
+                                        Repository Name <Text className="text-red-400">*</Text>
+                                    </Text>
+                                    <TextInput
+                                        value={newRepoName}
+                                        onChangeText={setNewRepoName}
+                                        placeholder="e.g. my-project"
+                                        placeholderTextColor="#475569"
+                                        autoCapitalize="none"
+                                        className="bg-[#1A2332] rounded-xl px-4 h-12 text-white text-sm border border-white/10"
+                                    />
+                                </View>
+
+                                <View className="mb-6">
+                                    <Text className="text-gray-400 text-sm font-medium mb-2">
+                                        Description
+                                    </Text>
+                                    <TextInput
+                                        value={newRepoDesc}
+                                        onChangeText={setNewRepoDesc}
+                                        placeholder="Optional description..."
+                                        placeholderTextColor="#475569"
+                                        multiline
+                                        numberOfLines={3}
+                                        textAlignVertical="top"
+                                        className="bg-[#1A2332] rounded-xl px-4 py-3 text-white text-sm border border-white/10 min-h-[80px]"
+                                    />
+                                </View>
+
+                                <View className="flex-row gap-3">
                                     <TouchableOpacity
-                                        onPress={() => {
-                                            updateField('github_repo_url', item.html_url);
-                                            setRepoModalVisible(false);
-                                        }}
-                                        className="py-4 border-b border-white/5 flex-row items-center justify-between"
+                                        onPress={() => setShowCreateRepo(false)}
+                                        className="flex-1 bg-white/5 rounded-xl py-3.5 items-center"
                                     >
-                                        <Text className={`text-base ${item.id === -1 ? 'text-gray-400 italic' : 'text-white'}`}>
-                                            {item.name}
-                                        </Text>
-                                        {formData['github_repo_url'] === item.html_url && (
-                                            <Feather name="check" size={20} color="#7C3AED" />
+                                        <Text className="text-white font-semibold">Back</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={handleCreateRepo}
+                                        disabled={creatingRepo || !newRepoName.trim()}
+                                        className={`flex-1 rounded-xl py-3.5 items-center flex-row justify-center gap-2 ${creatingRepo || !newRepoName.trim()
+                                            ? 'bg-[#334155]'
+                                            : 'bg-[#7C3AED]'
+                                            }`}
+                                    >
+                                        {creatingRepo ? (
+                                            <ActivityIndicator size="small" color="#fff" />
+                                        ) : (
+                                            <>
+                                                <Feather name="plus" size={16} color="#fff" />
+                                                <Text className="text-white font-semibold">Create</Text>
+                                            </>
                                         )}
                                     </TouchableOpacity>
+                                </View>
+                            </View>
+                        ) : (
+                            // ── Repo List ──
+                            <>
+                                {/* Create New Repo Button */}
+                                <TouchableOpacity
+                                    onPress={() => setShowCreateRepo(true)}
+                                    className="mx-4 mt-4 mb-2 bg-[#7C3AED]/15 rounded-xl py-3.5 items-center flex-row justify-center gap-2"
+                                >
+                                    <Feather name="plus-circle" size={18} color="#7C3AED" />
+                                    <Text className="text-[#7C3AED] font-semibold">
+                                        Create New Repository
+                                    </Text>
+                                </TouchableOpacity>
+
+                                {loadingRepos ? (
+                                    <View className="py-10 items-center justify-center">
+                                        <ActivityIndicator size="large" color="#7C3AED" />
+                                    </View>
+                                ) : (
+                                    <FlatList
+                                        data={[
+                                            { id: -1, name: 'None', full_name: '', html_url: '' } as any,
+                                            ...repos,
+                                        ]}
+                                        keyExtractor={(item) => item.id.toString()}
+                                        contentContainerStyle={{ padding: 16, paddingTop: 8 }}
+                                        showsVerticalScrollIndicator={false}
+                                        renderItem={({ item }) => {
+                                            const isSelected =
+                                                item.id === -1
+                                                    ? !selectedRepo
+                                                    : selectedRepo?.id === item.id;
+
+                                            return (
+                                                <TouchableOpacity
+                                                    onPress={() =>
+                                                        handleSelectRepo(item.id === -1 ? null : item)
+                                                    }
+                                                    className={`py-4 border-b border-white/5 flex-row items-center justify-between ${isSelected ? 'opacity-100' : 'opacity-70'
+                                                        }`}
+                                                >
+                                                    <View className="flex-1 mr-3">
+                                                        <Text
+                                                            className={`text-base ${item.id === -1
+                                                                ? 'text-gray-400 italic'
+                                                                : 'text-white'
+                                                                }`}
+                                                        >
+                                                            {item.id === -1 ? 'None' : item.full_name || item.name}
+                                                        </Text>
+                                                        {item.id !== -1 && item.private !== undefined && (
+                                                            <Text className="text-gray-500 text-xs mt-0.5">
+                                                                {item.private ? '🔒 Private' : '🌐 Public'}
+                                                            </Text>
+                                                        )}
+                                                    </View>
+                                                    {isSelected && (
+                                                        <Feather name="check" size={20} color="#7C3AED" />
+                                                    )}
+                                                </TouchableOpacity>
+                                            );
+                                        }}
+                                    />
                                 )}
-                            />
+                            </>
                         )}
                     </View>
                 </View>

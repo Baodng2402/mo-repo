@@ -12,7 +12,8 @@ import {
     Image,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather, MaterialIcons } from '@expo/vector-icons';
+import { Feather } from '@/components/icons';
+import { MaterialIcons } from '@/components/icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 

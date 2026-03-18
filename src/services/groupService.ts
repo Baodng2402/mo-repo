@@ -11,6 +11,8 @@ import type {
   AddMemberPayload,
   MembershipRole,
 } from '../types/group';
+import type { GroupRepo, LinkRepoPayload } from '../types/github';
+import type { GitHubCommit } from '../types/github';
 
 // ==================== Group CRUD ====================
 
@@ -141,4 +143,41 @@ export const removeMember = async (groupId: string, userId: string): Promise<voi
  */
 export const leaveGroup = async (groupId: string): Promise<void> => {
   await axiosClient.delete(ENDPOINTS.GROUPS.LEAVE(groupId));
+};
+
+// ==================== Repository Management ====================
+
+/**
+ * Get all repositories linked to a group
+ * GET /api/groups/:id/repos
+ */
+export const getGroupRepos = async (groupId: string): Promise<GroupRepo[]> => {
+  const response = await axiosClient.get<GroupRepo[]>(ENDPOINTS.GROUPS.REPOS(groupId));
+  return response.data;
+};
+
+/**
+ * Get recent commits for a linked group repository.
+ * GET /api/groups/:id/repos/:repoId/commits
+ */
+export const getGroupRepoCommits = async (
+  groupId: string,
+  repoId: string
+): Promise<GitHubCommit[]> => {
+  const response = await axiosClient.get<GitHubCommit[]>(
+    ENDPOINTS.GROUPS.REPO_COMMITS(groupId, repoId)
+  );
+  return response.data;
+};
+
+/**
+ * Link a repository to a group (leader only)
+ * POST /api/groups/:id/repos
+ */
+export const linkRepoToGroup = async (
+  groupId: string,
+  payload: LinkRepoPayload
+): Promise<GroupRepo> => {
+  const response = await axiosClient.post<GroupRepo>(ENDPOINTS.GROUPS.REPOS(groupId), payload);
+  return response.data;
 };

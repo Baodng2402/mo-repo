@@ -10,7 +10,8 @@ import {
     RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather, MaterialIcons } from '@expo/vector-icons';
+import { Feather } from '@/components/icons';
+import { MaterialIcons } from '@/components/icons';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -19,6 +20,7 @@ import { getGroupsByClass, joinGroup } from '@/services/groupService';
 import { showError, showSuccess } from '@/utils/toast';
 import type { Group } from '@/types/group';
 import type { RootStackParamList } from '@/navigation/AppNavigator';
+import { useUserStore } from '@/utils/stores/userStore';
 
 // ==================== Types ====================
 
@@ -34,10 +36,12 @@ const GroupCard = React.memo(
         item,
         onPress,
         onJoin,
+        isMine,
     }: {
         item: ClassGroup;
         onPress: (id: string) => void;
         onJoin: (id: string, name: string) => void;
+        isMine: boolean;
     }) => {
         const isEmpty = item.members_count === 0;
 
@@ -63,6 +67,11 @@ const GroupCard = React.memo(
                             </Text>
                         )}
                     </View>
+                    {isMine && (
+                        <View className="bg-[#7C3AED]/20 px-2.5 py-1 rounded-lg">
+                            <Text className="text-[#A78BFA] text-[10px] font-bold">Your Group</Text>
+                        </View>
+                    )}
                 </View>
 
                 {/* Members preview */}
@@ -95,24 +104,26 @@ const GroupCard = React.memo(
                             {item.members_count} member{item.members_count !== 1 ? 's' : ''}
                         </Text>
                     </View>
-                    <TouchableOpacity
-                        onPress={() => onJoin(item.id, item.name)}
-                        activeOpacity={0.8}
-                        className={`px-4 py-2 rounded-xl flex-row items-center gap-1.5 ${isEmpty ? 'bg-[#7C3AED]' : 'bg-[#243447]'
-                            }`}
-                    >
-                        <Feather
-                            name={isEmpty ? 'log-in' : 'user-plus'}
-                            size={14}
-                            color={isEmpty ? '#fff' : '#A78BFA'}
-                        />
-                        <Text
-                            className={`text-xs font-semibold ${isEmpty ? 'text-white' : 'text-[#A78BFA]'
+                    {!isMine && (
+                        <TouchableOpacity
+                            onPress={() => onJoin(item.id, item.name)}
+                            activeOpacity={0.8}
+                            className={`px-4 py-2 rounded-xl flex-row items-center gap-1.5 ${isEmpty ? 'bg-[#7C3AED]' : 'bg-[#243447]'
                                 }`}
                         >
-                            {isEmpty ? 'Join' : 'Join'}
-                        </Text>
-                    </TouchableOpacity>
+                            <Feather
+                                name={isEmpty ? 'log-in' : 'user-plus'}
+                                size={14}
+                                color={isEmpty ? '#fff' : '#A78BFA'}
+                            />
+                            <Text
+                                className={`text-xs font-semibold ${isEmpty ? 'text-white' : 'text-[#A78BFA]'
+                                    }`}
+                            >
+                                Join
+                            </Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             </TouchableOpacity>
         );
@@ -129,6 +140,13 @@ const ClassDetailScreen = () => {
     const [groups, setGroups] = useState<ClassGroup[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const currentUser = useUserStore((s) => s.userInfo);
+
+    // Check if user joined any group → filter to only show their group
+    const myGroup = groups.find((g) =>
+        g.members?.some((m) => m.user_id === currentUser?.id),
+    );
+    const displayGroups = myGroup ? [myGroup] : groups;
 
     // ── Fetch ────────────────────────────────────────
 
@@ -191,9 +209,14 @@ const ClassDetailScreen = () => {
 
     const renderGroup = useCallback(
         ({ item }: { item: ClassGroup }) => (
-            <GroupCard item={item} onPress={handleGroupPress} onJoin={handleJoinGroup} />
+            <GroupCard
+                item={item}
+                onPress={handleGroupPress}
+                onJoin={handleJoinGroup}
+                isMine={item.members?.some((m) => m.user_id === currentUser?.id) ?? false}
+            />
         ),
-        [handleGroupPress, handleJoinGroup],
+        [handleGroupPress, handleJoinGroup, currentUser],
     );
 
     const keyExtractor = useCallback((item: ClassGroup) => item.id, []);
@@ -213,7 +236,9 @@ const ClassDetailScreen = () => {
                 <View className="flex-1 ml-3">
                     <Text className="text-white text-lg font-bold">Class Groups</Text>
                     <Text className="text-gray-400 text-xs mt-0.5">
-                        {groups.length} group{groups.length !== 1 ? 's' : ''} available
+                        {myGroup
+                            ? 'You are in a group'
+                            : `${groups.length} group${groups.length !== 1 ? 's' : ''} available`}
                     </Text>
                 </View>
             </View>
@@ -225,7 +250,7 @@ const ClassDetailScreen = () => {
                 </View>
             ) : (
                 <FlatList
-                    data={groups}
+                    data={displayGroups}
                     renderItem={renderGroup}
                     keyExtractor={keyExtractor}
                     contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}

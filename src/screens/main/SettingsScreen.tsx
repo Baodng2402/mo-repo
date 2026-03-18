@@ -11,7 +11,8 @@ import {
     Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather, MaterialIcons } from '@expo/vector-icons';
+import { Feather } from '@/components/icons';
+import { MaterialIcons } from '@/components/icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/navigation/AppNavigator';
@@ -151,7 +152,7 @@ const SettingsScreen = () => {
                         iconColor="#22C55E"
                         title="Linked Accounts"
                         subtitle="GitHub, Jira integration"
-                        onPress={() => navigation.navigate('LinkThirdParty')}
+                        onPress={() => navigation.navigate('LinkedAccounts')}
                     />
                 </View>
 
