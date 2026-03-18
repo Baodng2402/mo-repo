@@ -14,7 +14,8 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather, MaterialIcons } from '@expo/vector-icons';
+import { Feather } from '@/components/icons';
+import { MaterialIcons } from '@/components/icons';
 import { register } from '../../services/authService';
 import { showError, showInfo } from '../../utils/toast';
 import { useUserStore } from '../../utils/stores/userStore';
@@ -72,7 +73,7 @@ const SignUpScreen = ({ navigation }: Props) => {
             const { login: loginApi } = await import('../../services/authService');
             const authData = await loginApi({ email, password });
             await saveUserToStore(authData);
-            navigation.navigate('LinkThirdParty');
+            navigation.navigate('MainTabs');
         } catch (error) {
             console.log(error);
             showError('Failed Sign Up', 'Please try again later.');
@@ -113,7 +114,7 @@ const SignUpScreen = ({ navigation }: Props) => {
                                 Create your account
                             </Text>
                             <Text className="text-[#92adc9] text-base">
-                                Join your SWP391 capstone team. Connect Jira and GitHub in the next step.
+                                Join your SWP391 capstone team and start collaborating right away.
                             </Text>
                         </View>
 
@@ -243,7 +244,7 @@ const SignUpScreen = ({ navigation }: Props) => {
                             ) : (
                                 <>
                                     <Text className="text-white text-base font-bold">
-                                        Sign Up &amp; Continue
+                                        Sign Up
                                     </Text>
                                     <Feather name="arrow-right" size={20} color="white" />
                                 </>
@@ -260,29 +261,6 @@ const SignUpScreen = ({ navigation }: Props) => {
                                     Log In
                                 </Text>
                             </TouchableOpacity>
-                        </View>
-
-                        {/* Integration Hints */}
-                        <View className="mt-8 pt-6 border-t border-white/10">
-                            <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider text-center mb-3">
-                                Integrates seamlessly with
-                            </Text>
-                            <View className="flex-row items-center justify-center gap-6 opacity-60">
-                                {/* Jira */}
-                                <View className="flex-row items-center gap-2">
-                                    <MaterialIcons name="task" size={20} color="#9ca3af" />
-                                    <Text className="text-gray-400 text-sm font-bold">
-                                        Jira
-                                    </Text>
-                                </View>
-                                {/* GitHub */}
-                                <View className="flex-row items-center gap-2">
-                                    <Feather name="code" size={20} color="#9ca3af" />
-                                    <Text className="text-gray-400 text-sm font-bold">
-                                        GitHub
-                                    </Text>
-                                </View>
-                            </View>
                         </View>
 
                         <View className="h-8" />

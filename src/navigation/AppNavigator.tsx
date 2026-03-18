@@ -6,12 +6,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import SignInScreen from '../screens/auth/SignInScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
 import LinkThirdPartyScreen from '../screens/auth/LinkThirdPartyScreen';
+import LinkedAccountsScreen from '../screens/main/LinkedAccountsScreen';
 import MainTabNavigator from './MainTabNavigator';
 import GroupDetailScreen from '../screens/main/GroupDetailScreen';
 import ClassDetailScreen from '../screens/main/ClassDetailScreen';
 import CreateGroupScreen from '../screens/main/CreateGroupScreen';
 import AddMemberScreen from '../screens/main/AddMemberScreen';
 import EvaluationScreen from '../screens/main/EvaluationScreen';
+import DocumentSubmissionsScreen from '../screens/main/DocumentSubmissionsScreen';
+import ReportsScreen from '../screens/main/ReportsScreen';
 import { getProfile } from '../services/authService';
 import { useUserStore } from '../utils/stores/userStore';
 
@@ -22,12 +25,15 @@ export type RootStackParamList = {
     SignUp: undefined;
     MainTabs: undefined;
     LinkThirdParty: undefined;
+    LinkedAccounts: undefined;
     ClassDetail: { classId: string };
     GroupDetail: { groupId: string };
     CreateGroup: undefined;
     EditGroup: { groupId: string };
     AddMember: { groupId: string };
     Evaluation: { groupId: string };
+    Documents: { groupId: string };
+    Reports: { groupId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -111,6 +117,7 @@ export default function AppNavigator() {
             <Stack.Screen name="SignIn" component={SignInScreen} />
             <Stack.Screen name="SignUp" component={SignUpScreen} />
             <Stack.Screen name="LinkThirdParty" component={LinkThirdPartyScreen} />
+            <Stack.Screen name="LinkedAccounts" component={LinkedAccountsScreen} />
 
             {/* Main App with Bottom Tabs */}
             <Stack.Screen
@@ -126,6 +133,8 @@ export default function AppNavigator() {
             <Stack.Screen name="EditGroup" component={CreateGroupScreen} />
             <Stack.Screen name="AddMember" component={AddMemberScreen} />
             <Stack.Screen name="Evaluation" component={EvaluationScreen} />
+            <Stack.Screen name="Documents" component={DocumentSubmissionsScreen} />
+            <Stack.Screen name="Reports" component={ReportsScreen} />
         </Stack.Navigator>
     );
 }

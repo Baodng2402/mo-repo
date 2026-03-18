@@ -14,13 +14,11 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather, AntDesign } from '@expo/vector-icons';
+import { Feather } from '@/components/icons';
 import { useUserStore } from '../../utils/stores/userStore';
-import { login, getGitHubAuthUrl, getProfile } from '../../services/authService';
+import { login } from '../../services/authService';
 import { showError, showSuccess } from '../../utils/toast';
-import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Eye, EyeOff } from 'lucide-react-native';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignIn'>;
 
@@ -52,68 +50,6 @@ const SignInScreen = ({ navigation }: Props) => {
         } catch (error: any) {
             showError('Email or password is incorrect', 'Login Failed');
         }
-    };
-
-    const handleGitHubSignIn = async () => {
-        // Use Expo's proxy for development (Expo Go)
-        // In production build, use native scheme: 'jihub'
-        const redirectUri = AuthSession.makeRedirectUri({
-            scheme: 'jihub',
-            preferLocalhost: false,
-        });
-
-        console.log('GitHub OAuth redirect_uri:', redirectUri);
-
-        const baseAuthUrl = getGitHubAuthUrl();
-        const authUrl = `${baseAuthUrl}?redirect_uri=${encodeURIComponent(redirectUri)}`;
-
-        console.log('Full auth URL:', authUrl);
-
-        try {
-            const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-            if (result.type === 'success' && result.url) {
-                const url = new URL(result.url);
-                const token = url.searchParams.get('token');
-                const error = url.searchParams.get('error');
-
-                if (error) { showError(decodeURIComponent(error), 'Login Failed'); return; }
-                if (token) {
-                    await AsyncStorage.setItem('access_token', token);
-                    const profile = await getProfile();
-                    await saveUserToStore({ access_token: token, user: profile });
-                    showSuccess(`Welcome back, ${profile.fullName}!`, 'Login Successful');
-                    navigation.navigate('MainTabs');
-                }
-            }
-        } catch (_error) {
-            showError('Could not open GitHub authentication session', 'Login Failed');
-        }
-    };
-
-    const handleJiraSignIn = async () => {
-        // const redirectUri = AuthSession.makeRedirectUri({ scheme: 'jihub', path: '/auth/jira/callback' });
-        // const baseAuthUrl = getJiraAuthUrl();
-        // const authUrl = `${baseAuthUrl}?mobile_redirect=${encodeURIComponent(redirectUri)}`;
-
-        // try {
-        //     const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-        //     if (result.type === 'success' && result.url) {
-        //         const url = new URL(result.url);
-        //         const token = url.searchParams.get('token');
-        //         const error = url.searchParams.get('error');
-
-        //         if (error) { showError(decodeURIComponent(error), 'Login Failed'); return; }
-        //         if (token) {
-        //             await AsyncStorage.setItem('access_token', token);
-        //             const profile = await getProfile();
-        //             await saveUserToStore({ access_token: token, user: profile });
-        //             showSuccess(`Welcome back, ${profile.fullName}!`, 'Login Successful');
-        //             navigation.navigate('MainTabs');
-        //         }
-        //     }
-        // } catch (error) {
-        //     showError('Could not open Jira authentication session', 'Login Failed');
-        // }
     };
 
     return (
@@ -170,7 +106,11 @@ const SignInScreen = ({ navigation }: Props) => {
                                     className="flex-1 text-white text-base"
                                 />
                                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                                    <Feather name={showPassword ? 'eye' : 'eye-off'} size={20} color="#64748B" />
+                                    {showPassword ? (
+                                        <Eye size={20} color="#64748B" />
+                                    ) : (
+                                        <EyeOff size={20} color="#64748B" />
+                                    )}
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -185,27 +125,8 @@ const SignInScreen = ({ navigation }: Props) => {
                             <Text className="text-white text-base font-semibold">Sign In</Text>
                         </TouchableOpacity>
 
-                        {/* Divider */}
-                        <View className="flex-row items-center my-6">
-                            <View className="flex-1 h-px bg-white/10" />
-                            <Text className="text-gray-500 text-sm mx-4">Or continue with</Text>
-                            <View className="flex-1 h-px bg-white/10" />
-                        </View>
-
-                        {/* OAuth Buttons */}
-                        <View className="flex-row gap-3 mb-8">
-                            <TouchableOpacity onPress={handleGitHubSignIn} activeOpacity={0.8} className="flex-1 flex-row items-center justify-center bg-[#1A2332] rounded-xl py-4 gap-2 border border-white/10">
-                                <AntDesign name="github" size={22} color="#fff" />
-                                <Text className="text-white text-sm font-medium">GitHub</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={handleJiraSignIn} activeOpacity={0.8} className="flex-1 flex-row items-center justify-center bg-[#1A2332] rounded-xl py-4 gap-2 border border-white/10">
-                                <Feather name="trello" size={22} color="#0052CC" />
-                                <Text className="text-white text-sm font-medium">Jira</Text>
-                            </TouchableOpacity>
-                        </View>
-
                         {/* Sign Up Link */}
-                        <View className="flex-row justify-center pb-6">
+                        <View className="flex-row justify-center mt-8 pb-6">
                             <Text className="text-gray-400 text-sm">Don't have an account? </Text>
                             <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
                                 <Text className="text-[#7C3AED] text-sm font-semibold">Sign Up</Text>

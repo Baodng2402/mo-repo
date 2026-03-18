@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Animated } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Feather } from '@expo/vector-icons';
+import { Feather } from '@/components/icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import DashboardScreen from '@/screens/main/DashboardScreen';

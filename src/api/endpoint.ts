@@ -17,6 +17,10 @@ const ENDPOINTS = {
 
   GITHUB: {
     REPOS: '/api/github/repos',
+    CREATE_REPO: '/api/github/repos',
+    COMMITS: (owner: string, repo: string) => `/api/github/repos/${owner}/${repo}/commits`,
+    CONTRIBUTOR_STATS: (owner: string, repo: string) =>
+      `/api/github/repos/${owner}/${repo}/contributors-stats`,
   },
 
   GROUPS: {
@@ -32,6 +36,30 @@ const ENDPOINTS = {
     LEAVE: (id: string) => `/api/groups/${id}/members/me`,
     BY_CLASS: (classId: string) => `/api/groups/class/${classId}`,
     JOIN_GROUP: (id: string) => `/api/groups/${id}/join`,
+    REPOS: (id: string) => `/api/groups/${id}/repos`,
+    REPO_COMMITS: (groupId: string, repoId: string) =>
+      `/api/groups/${groupId}/repos/${repoId}/commits`,
+  },
+
+  JIRA: {
+    PROJECTS: '/api/jira/projects',
+    LINK_PROJECT: '/api/jira/projects/link',
+  },
+
+  REPORTS: {
+    SRS: (groupId: string) => `/api/reports/srs/${groupId}`,
+    ASSIGNMENTS: (groupId: string) => `/api/reports/assignments/${groupId}`,
+    COMMITS: (groupId: string) => `/api/reports/commits/${groupId}`,
+  },
+
+  DOCUMENTS: {
+    GROUP_SUBMISSIONS: (groupId: string) => `/api/documents/group/${groupId}`,
+    SUBMIT_FOR_GROUP: (groupId: string) => `/api/documents/group/${groupId}`,
+  },
+
+  NOTIFICATIONS: {
+    LIST: '/api/notifications',
+    MARK_READ: (id: string) => `/api/notifications/${id}/read`,
   },
 
   PROJECT: {

@@ -39,9 +39,10 @@ export interface AuthResponse {
 
 /** Linked OAuth account info from GET /api/auth/linked-accounts */
 export interface LinkedAccount {
-  provider: 'GITHUB' | 'GOOGLE';
-  providerId: string;
-  linkedAt: string;
+  provider: 'GITHUB' | 'JIRA';
+  provider_username: string;
+  provider_email: string;
+  created_at: Date;
 }
 
 // ==================== API Functions ====================
@@ -77,18 +78,30 @@ export const unlinkProvider = async (provider: 'GITHUB' | 'GOOGLE'): Promise<voi
 
 /**
  * Build the GitHub OAuth URL to open in browser.
- * If token is provided, it will link the account instead of logging in.
+ * redirectUri is required by backend to validate callback origin.
  */
-export const getGitHubAuthUrl = (token?: string): string => {
+export const getGitHubAuthUrl = (token?: string, redirectUri?: string): string => {
   const baseUrl = `${axiosClient.defaults.baseURL}${ENDPOINTS.AUTH.LINK_GITHUB}`;
-  return token ? `${baseUrl}?token=${token}` : baseUrl;
+  const params = new URLSearchParams();
+
+  if (redirectUri) params.set('redirect_uri', redirectUri);
+  if (token) params.set('token', token);
+
+  const query = params.toString();
+  return query ? `${baseUrl}?${query}` : baseUrl;
 };
 
 /**
  * Build the Jira OAuth URL to open in browser.
- * TODO: Implement when Jira OAuth is ready on the backend.
+ * redirectUri is required by backend to validate callback origin.
  */
-export const getJiraAuthUrl = (token?: string): string => {
+export const getJiraAuthUrl = (token?: string, redirectUri?: string): string => {
   const baseUrl = `${axiosClient.defaults.baseURL}/api/auth/jira`;
-  return token ? `${baseUrl}?token=${token}` : baseUrl;
+  const params = new URLSearchParams();
+
+  if (redirectUri) params.set('redirect_uri', redirectUri);
+  if (token) params.set('token', token);
+
+  const query = params.toString();
+  return query ? `${baseUrl}?${query}` : baseUrl;
 };

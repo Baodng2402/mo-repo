@@ -13,7 +13,8 @@ import {
     Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather, MaterialIcons } from '@expo/vector-icons';
+import { Feather } from '@/components/icons';
+import { MaterialIcons } from '@/components/icons';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -24,15 +25,26 @@ import {
     removeMember,
     updateMemberRole,
     deleteGroup,
+    getGroupRepos,
 } from '@/services/groupService';
+import { getContributorStats, getCommits } from '@/services/githubService';
+import { getAssignmentReport, type AssignmentItem } from '@/services/reportService';
 import { showSuccess, showError } from '@/utils/toast';
 import type { GroupDetail, GroupMember, MembershipRole } from '@/types/group';
+import type { ContributorStat, GroupRepo } from '@/types/github';
 import type { JiraTaskStatus } from '@/types/activity';
 import { JIRA_STATUS_CONFIG } from '@/types/activity';
 import type { RootStackParamList } from '@/navigation/AppNavigator';
 import { useUserStore } from '@/utils/stores/userStore';
 
 // ==================== Constants ====================
+
+/** Role hierarchy — higher number = higher rank */
+const ROLE_RANK: Record<string, number> = {
+    MEMBER: 0,
+    MENTOR: 1,
+    LEADER: 2,
+};
 
 /** Role badge display config */
 const ROLE_CONFIG: Record<string, { label: string; color: string }> = {
@@ -48,20 +60,12 @@ const STATUS_COLORS: Record<string, string> = {
     COMPLETED: '#3B82F6',
 };
 
-/**
- * Placeholder Jira tasks per member (scaffold data).
- * Will be replaced with real API data when Jira integration is ready.
- */
-const PLACEHOLDER_TASKS: {
-    key: string;
-    summary: string;
-    status: JiraTaskStatus;
-    priority: string;
-}[] = [
-        { key: 'TASK-1', summary: 'Setup project structure', status: 'DONE', priority: 'HIGH' },
-        { key: 'TASK-2', summary: 'Implement authentication', status: 'IN_PROGRESS', priority: 'HIGH' },
-        { key: 'TASK-3', summary: 'Design database schema', status: 'TO_DO', priority: 'MEDIUM' },
-    ];
+const normalizeStatus = (status: string): JiraTaskStatus => {
+    const s = status.toUpperCase();
+    if (s.includes('DONE')) return 'DONE';
+    if (s.includes('PROGRESS') || s.includes('IN_')) return 'IN_PROGRESS';
+    return 'TO_DO';
+};
 
 // ==================== Component ====================
 
@@ -74,10 +78,23 @@ const GroupDetailScreen = () => {
     const [group, setGroup] = useState<GroupDetail | null>(null);
     const [loading, setLoading] = useState(true);
 
+    // GitHub linked repos & contributor stats
+    const [linkedRepos, setLinkedRepos] = useState<GroupRepo[]>([]);
+    const [contributorStats, setContributorStats] = useState<ContributorStat[]>([]);
+    const [loadingStats, setLoadingStats] = useState(false);
+    const [groupTasks, setGroupTasks] = useState<AssignmentItem[]>([]);
+    const [loadingTasks, setLoadingTasks] = useState(false);
+
     // ── Derived State ───────────────────────────────
 
     const currentMember = group?.members.find((m) => m.id === currentUser?.id);
     const isLeader = currentMember?.role_in_group === 'LEADER';
+    const isAdmin = currentMember?.role_in_group === 'MENTOR';
+    const currentRank = ROLE_RANK[currentMember?.role_in_group || 'MEMBER'] ?? 0;
+
+    /** Check if current user outranks a target member */
+    const canRemove = (target: GroupMember) =>
+        currentRank > (ROLE_RANK[target.role_in_group] ?? 0);
 
     // ── Fetch Data ──────────────────────────────────
 
@@ -86,6 +103,78 @@ const GroupDetailScreen = () => {
             setLoading(true);
             const data = await getGroupById(groupId);
             setGroup(data);
+
+            setLoadingTasks(true);
+            const assignmentReport = await getAssignmentReport(groupId).catch(() => null);
+            setGroupTasks(assignmentReport?.assignments || []);
+            setLoadingTasks(false);
+
+            // Fetch linked repos + stats
+            try {
+                const repos = await getGroupRepos(groupId);
+                setLinkedRepos(repos);
+
+                // Determine which repo to fetch stats for
+                let owner = '';
+                let repoName = '';
+
+                const primaryRepo = repos.find((r) => r.is_primary) || repos[0];
+                if (primaryRepo) {
+                    owner = primaryRepo.repo_owner;
+                    repoName = primaryRepo.repo_name;
+                } else if (data.github_repo_url) {
+                    // Fallback: parse owner/repo from github_repo_url field
+                    const match = data.github_repo_url.match(
+                        /github\.com\/([^/]+)\/([^/]+)/,
+                    );
+                    if (match) {
+                        owner = match[1];
+                        repoName = match[2].replace(/\.git$/, '');
+                    }
+                }
+
+                if (owner && repoName) {
+                    setLoadingStats(true);
+
+                    // Fetch both: commits for accurate count, stats for LOC
+                    const [commits, stats] = await Promise.all([
+                        getCommits(owner, repoName).catch(() => []),
+                        getContributorStats(owner, repoName).catch(() => []),
+                    ]);
+
+                    // Count commits per author from commits API
+                    const commitCountMap: Record<string, number> = {};
+                    for (const c of commits) {
+                        const key = c.author || 'Unknown';
+                        commitCountMap[key] = (commitCountMap[key] || 0) + 1;
+                    }
+
+                    // Merge: use commit count from commits API, LOC from stats API
+                    const mergedStats: ContributorStat[] = stats.map((s) => ({
+                        ...s,
+                        commits: commitCountMap[s.author] ?? s.commits,
+                    }));
+
+                    // Add authors from commits API not in stats
+                    for (const [author, count] of Object.entries(commitCountMap)) {
+                        if (!stats.some((s) => s.author === author)) {
+                            mergedStats.push({
+                                author,
+                                developer_id: 0,
+                                commits: count,
+                                lines_added: 0,
+                                lines_deleted: 0,
+                                net_change: 0,
+                            });
+                        }
+                    }
+
+                    setContributorStats(mergedStats);
+                    setLoadingStats(false);
+                }
+            } catch {
+                // Non-blocking — repos/stats may not be available
+            }
         } catch (error: any) {
             showError(error.response?.data?.message || 'Failed to load group');
             navigation.goBack();
@@ -296,7 +385,8 @@ const GroupDetailScreen = () => {
                         </Text>
                     </View>
 
-                    {isLeader && !isCurrentUser && (
+                    {/* Show ⋮ menu for leader/admin on lower-rank members only */}
+                    {!isCurrentUser && (isLeader || isAdmin) && canRemove(member) && (
                         <TouchableOpacity
                             onPress={() => openMemberActions(member)}
                             className="p-1"
@@ -436,74 +526,144 @@ const GroupDetailScreen = () => {
                             )}
                         </View>
                     )}
+
+                    {/* Quick Actions */}
+                    <View className="mt-4 pt-3 border-t border-white/5 flex-row gap-2">
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('Documents', { groupId: group.id })}
+                            className="flex-1 bg-[#243447] rounded-xl py-2.5 items-center"
+                            activeOpacity={0.8}
+                        >
+                            <Text className="text-[#93C5FD] text-xs font-semibold">Documents</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('Reports', { groupId: group.id })}
+                            className="flex-1 bg-[#243447] rounded-xl py-2.5 items-center"
+                            activeOpacity={0.8}
+                        >
+                            <Text className="text-[#A78BFA] text-xs font-semibold">Reports</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
-                {/* ── GitHub Activity Section ───────────── */}
-                {group.github_repo_url && (
+                {/* ── GitHub Contributions (Real Data) ───── */}
+                {(linkedRepos.length > 0 || contributorStats.length > 0 || loadingStats || group.github_repo_url) && (
                     <View className="mx-4 mt-4">
                         <View className="flex-row items-center gap-2 mb-3">
                             <Feather name="git-commit" size={18} color="#A855F7" />
                             <Text className="text-white text-base font-bold">
                                 Contributions
                             </Text>
+                            {linkedRepos.length > 1 && (
+                                <Text className="text-gray-500 text-xs">
+                                    ({linkedRepos.length} repos)
+                                </Text>
+                            )}
                         </View>
 
                         <View className="bg-[#1A2332] rounded-2xl p-4">
-                            {/* Per-member contribution rows */}
-                            {group.members.map((member, idx) => {
-                                // Placeholder commit count per member (scaffold)
-                                const commits = Math.floor(Math.random() * 20) + 1;
-                                const isLast = idx === group.members.length - 1;
-                                return (
-                                    <View
-                                        key={`contrib-${member.id}`}
-                                        className={`flex-row items-center justify-between py-3 ${!isLast ? 'border-b border-white/5' : ''
-                                            }`}
-                                    >
-                                        <View className="flex-row items-center flex-1">
-                                            <View className="w-8 h-8 rounded-full bg-[#243447] items-center justify-center">
-                                                <Text className="text-white font-bold text-xs">
-                                                    {member.full_name?.charAt(0)?.toUpperCase()}
-                                                </Text>
-                                            </View>
-                                            <Text
-                                                className="text-white text-sm ml-2.5 flex-1"
-                                                numberOfLines={1}
+                            {loadingStats ? (
+                                <ActivityIndicator size="small" color="#A855F7" style={{ paddingVertical: 16 }} />
+                            ) : contributorStats.length > 0 ? (
+                                <>
+                                    {contributorStats.map((stat, idx) => {
+                                        const maxCommits = Math.max(...contributorStats.map((s) => s.commits), 1);
+                                        const isLast = idx === contributorStats.length - 1;
+                                        const contributorKey = `contrib-${stat.developer_id ?? 'na'}-${stat.author ?? 'unknown'}-${idx}`;
+                                        return (
+                                            <View
+                                                key={contributorKey}
+                                                className={`flex-row items-center justify-between py-3 ${!isLast ? 'border-b border-white/5' : ''}`}
                                             >
-                                                {member.full_name}
-                                            </Text>
-                                        </View>
-                                        <View className="flex-row items-center gap-3">
-                                            <View className="items-center">
-                                                <Text className="text-white font-bold text-sm">
-                                                    {commits}
-                                                </Text>
-                                                <Text className="text-gray-500 text-[9px]">
-                                                    commits
-                                                </Text>
+                                                <View className="flex-row items-center flex-1">
+                                                    {stat.avatar_url ? (
+                                                        <Image
+                                                            source={{ uri: stat.avatar_url }}
+                                                            className="w-8 h-8 rounded-full"
+                                                        />
+                                                    ) : (
+                                                        <View className="w-8 h-8 rounded-full bg-[#243447] items-center justify-center">
+                                                            <Text className="text-white font-bold text-xs">
+                                                                {stat.author?.charAt(0)?.toUpperCase()}
+                                                            </Text>
+                                                        </View>
+                                                    )}
+                                                    <View className="ml-2.5 flex-1">
+                                                        <Text className="text-white text-sm" numberOfLines={1}>
+                                                            {stat.author}
+                                                        </Text>
+                                                        <Text className="text-gray-500 text-[10px]">
+                                                            +{stat.lines_added.toLocaleString()} / -{stat.lines_deleted.toLocaleString()}
+                                                        </Text>
+                                                    </View>
+                                                </View>
+                                                <View className="flex-row items-center gap-3">
+                                                    <View className="items-center">
+                                                        <Text className="text-white font-bold text-sm">
+                                                            {stat.commits}
+                                                        </Text>
+                                                        <Text className="text-gray-500 text-[9px]">
+                                                            commits
+                                                        </Text>
+                                                    </View>
+                                                    <View className="w-16 h-1.5 bg-[#243447] rounded-full overflow-hidden">
+                                                        <View
+                                                            className="h-full rounded-full bg-[#A855F7]"
+                                                            style={{ width: `${Math.round((stat.commits / maxCommits) * 100)}%` }}
+                                                        />
+                                                    </View>
+                                                </View>
                                             </View>
-                                            <View className="w-16 h-1.5 bg-[#243447] rounded-full overflow-hidden">
-                                                <View
-                                                    className="h-full rounded-full bg-[#A855F7]"
-                                                    style={{ width: `${Math.min(commits * 5, 100)}%` }}
-                                                />
-                                            </View>
-                                        </View>
-                                    </View>
-                                );
-                            })}
-
-                            {/* View on GitHub button */}
-                            <TouchableOpacity
-                                onPress={handleOpenRepo}
-                                activeOpacity={0.8}
-                                className="mt-3 flex-row items-center justify-center gap-2 bg-[#243447] py-2.5 rounded-xl"
-                            >
-                                <Feather name="external-link" size={14} color="#A855F7" />
-                                <Text className="text-[#A855F7] text-sm font-semibold">
-                                    View on GitHub
+                                        );
+                                    })}
+                                </>
+                            ) : (
+                                <Text className="text-gray-500 text-sm text-center py-4">
+                                    No contribution data yet
                                 </Text>
-                            </TouchableOpacity>
+                            )}
+
+                            {/* Linked repos list */}
+                            <View className="mt-3 pt-3 border-t border-white/5 gap-2">
+                                {linkedRepos.length > 0
+                                    ? linkedRepos.map((repo) => (
+                                        <TouchableOpacity
+                                            key={repo.id}
+                                            onPress={() =>
+                                                Linking.openURL(repo.repo_url).catch(() =>
+                                                    showError('Cannot open this URL'),
+                                                )
+                                            }
+                                            activeOpacity={0.8}
+                                            className="flex-row items-center justify-between bg-[#243447] py-2.5 px-3 rounded-xl"
+                                        >
+                                            <View className="flex-row items-center gap-2 flex-1">
+                                                <Feather name="github" size={14} color="#A855F7" />
+                                                <Text className="text-[#A855F7] text-sm font-semibold" numberOfLines={1}>
+                                                    {repo.repo_owner}/{repo.repo_name}
+                                                </Text>
+                                            </View>
+                                            <Feather name="external-link" size={11} color="#A855F7" />
+                                        </TouchableOpacity>
+                                    ))
+                                    : group.github_repo_url && (
+                                        <TouchableOpacity
+                                            onPress={() =>
+                                                Linking.openURL(group.github_repo_url!).catch(() =>
+                                                    showError('Cannot open this URL'),
+                                                )
+                                            }
+                                            activeOpacity={0.8}
+                                            className="flex-row items-center justify-center gap-2 bg-[#243447] py-2.5 rounded-xl"
+                                        >
+                                            <Feather name="github" size={14} color="#A855F7" />
+                                            <Text className="text-[#A855F7] text-sm font-semibold">
+                                                View on GitHub
+                                            </Text>
+                                            <Feather name="external-link" size={11} color="#A855F7" />
+                                        </TouchableOpacity>
+                                    )}
+                            </View>
                         </View>
                     </View>
                 )}
@@ -523,8 +683,8 @@ const GroupDetailScreen = () => {
                             {(['TO_DO', 'IN_PROGRESS', 'DONE'] as JiraTaskStatus[]).map(
                                 (status) => {
                                     const cfg = JIRA_STATUS_CONFIG[status];
-                                    const count = PLACEHOLDER_TASKS.filter(
-                                        (t) => t.status === status,
+                                    const count = groupTasks.filter(
+                                        (t) => normalizeStatus(t.status) === status,
                                     ).length;
                                     return (
                                         <View
@@ -548,38 +708,41 @@ const GroupDetailScreen = () => {
                         </View>
 
                         {/* Task list */}
-                        {PLACEHOLDER_TASKS.map((task, idx) => (
-                            <View
-                                key={task.key}
-                                className={`flex-row items-center justify-between py-3 ${idx < PLACEHOLDER_TASKS.length - 1
-                                    ? 'border-b border-white/5'
-                                    : ''
-                                    }`}
-                            >
-                                <View className="flex-1 mr-3">
-                                    <View className="flex-row items-center gap-2 mb-1">
-                                        <Text className="text-gray-500 text-[10px] font-mono">
-                                            {task.key}
+                        {loadingTasks ? (
+                            <ActivityIndicator size="small" color="#4C9AFF" style={{ paddingVertical: 12 }} />
+                        ) : groupTasks.length > 0 ? (
+                            groupTasks.map((task, idx) => (
+                                <View
+                                    key={task.key}
+                                    className={`flex-row items-center justify-between py-3 ${idx < groupTasks.length - 1
+                                        ? 'border-b border-white/5'
+                                        : ''
+                                        }`}
+                                >
+                                    <View className="flex-1 mr-3">
+                                        <View className="flex-row items-center gap-2 mb-1">
+                                            <Text className="text-gray-500 text-[10px] font-mono">
+                                                {task.key}
+                                            </Text>
+                                            {renderStatusBadge(normalizeStatus(task.status))}
+                                        </View>
+                                        <Text className="text-white text-sm" numberOfLines={1}>
+                                            {task.summary}
                                         </Text>
-                                        {renderStatusBadge(task.status)}
+                                        <Text className="text-gray-500 text-[10px] mt-1" numberOfLines={1}>
+                                            {task.assignee || 'Unassigned'}
+                                        </Text>
                                     </View>
-                                    <Text
-                                        className="text-white text-sm"
-                                        numberOfLines={1}
-                                    >
-                                        {task.summary}
-                                    </Text>
                                 </View>
+                            ))
+                        ) : (
+                            <View className="mt-1 bg-[#243447] rounded-xl p-3 flex-row items-center gap-2">
+                                <MaterialIcons name="info-outline" size={14} color="#64748B" />
+                                <Text className="text-gray-500 text-xs flex-1">
+                                    No Jira tasks available for this group yet.
+                                </Text>
                             </View>
-                        ))}
-
-                        {/* Note about placeholder */}
-                        <View className="mt-3 bg-[#243447] rounded-xl p-3 flex-row items-center gap-2">
-                            <MaterialIcons name="info-outline" size={14} color="#64748B" />
-                            <Text className="text-gray-500 text-xs flex-1">
-                                Connect Jira to see real tasks. This is preview data.
-                            </Text>
-                        </View>
+                        )}
                     </View>
                 </View>
 
@@ -630,8 +793,8 @@ const GroupDetailScreen = () => {
                         </TouchableOpacity>
                     )}
 
-                    {/* Leave / Delete */}
-                    {currentMember && !isLeader && (
+                    {/* Leave — any member (including leader) can leave */}
+                    {currentMember && (
                         <TouchableOpacity
                             onPress={handleLeaveGroup}
                             activeOpacity={0.8}
@@ -767,18 +930,20 @@ const GroupDetailScreen = () => {
                                 </TouchableOpacity>
                             ))}
 
-                        {/* Remove */}
-                        <TouchableOpacity
-                            onPress={() =>
-                                selectedMemberRef.current &&
-                                handleRemoveMember(selectedMemberRef.current)
-                            }
-                            activeOpacity={0.7}
-                            className="flex-row items-center py-3.5 px-3 bg-red-500/10 rounded-xl mt-2"
-                        >
-                            <Feather name="user-minus" size={18} color="#EF4444" />
-                            <Text className="text-red-400 font-medium ml-3">Remove from Group</Text>
-                        </TouchableOpacity>
+                        {/* Remove — only if current user outranks the selected member */}
+                        {selectedMemberRef.current && canRemove(selectedMemberRef.current) && (
+                            <TouchableOpacity
+                                onPress={() =>
+                                    selectedMemberRef.current &&
+                                    handleRemoveMember(selectedMemberRef.current)
+                                }
+                                activeOpacity={0.7}
+                                className="flex-row items-center py-3.5 px-3 bg-red-500/10 rounded-xl mt-2"
+                            >
+                                <Feather name="user-minus" size={18} color="#EF4444" />
+                                <Text className="text-red-400 font-medium ml-3">Remove from Group</Text>
+                            </TouchableOpacity>
+                        )}
 
                         {/* Cancel */}
                         <TouchableOpacity

@@ -13,7 +13,8 @@ import {
     Pressable,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather, MaterialIcons } from '@expo/vector-icons';
+import { Feather } from '@/components/icons';
+import { MaterialIcons } from '@/components/icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -76,18 +77,16 @@ const BrowseClassCard = React.memo(
     ({
         item,
         onJoin,
-        onPress,
     }: {
         item: ClassItem;
         onJoin: (item: ClassItem) => void;
-        onPress: (id: string) => void;
     }) => {
         const statusCfg = STATUS_CONFIG[item.status] || STATUS_CONFIG.ONGOING;
 
         return (
             <TouchableOpacity
                 activeOpacity={0.9}
-                onPress={() => onPress(item.id)}
+                onPress={() => onJoin(item)}
                 className="bg-[#1A2332] rounded-2xl p-4 mb-3"
             >
                 <View className="flex-row justify-between items-start">
@@ -232,7 +231,7 @@ const ClassesScreen = () => {
         } finally {
             setJoining(false);
         }
-    }, [selectedClass, enrollmentKey, fetchData]);
+    }, [selectedClass, enrollmentKey, fetchData, navigation]);
 
     // ── Navigation ───────────────────────────────────
 
@@ -247,9 +246,9 @@ const ClassesScreen = () => {
 
     const renderBrowseClass = useCallback(
         ({ item }: { item: ClassItem }) => (
-            <BrowseClassCard item={item} onJoin={openJoinModal} onPress={handleClassPress} />
+            <BrowseClassCard item={item} onJoin={openJoinModal} />
         ),
-        [openJoinModal, handleClassPress],
+        [openJoinModal],
     );
 
     const keyExtractor = useCallback((item: ClassItem) => item.id, []);
