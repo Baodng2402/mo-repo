@@ -3,20 +3,6 @@ import ENDPOINTS from '../api/endpoint';
 import { getGroupById, getGroupRepos, getGroupRepoCommits } from './groupService';
 import { getCommits } from './githubService';
 
-export interface AssignmentItem {
-  key: string;
-  summary: string;
-  status: string;
-  assignee: string;
-  type: string;
-}
-
-export interface AssignmentReport {
-  groupName: string;
-  totalTasks: number;
-  assignments: AssignmentItem[];
-}
-
 export interface SrsReport {
   markdown: string;
 }
@@ -84,14 +70,6 @@ export const generateSrsReport = async (groupId: string): Promise<SrsReport> => 
   return response.data;
 };
 
-/**
- * Get Jira assignment report for a group.
- * GET /api/reports/assignments/:groupId
- */
-export const getAssignmentReport = async (groupId: string): Promise<AssignmentReport> => {
-  const response = await axiosClient.get<AssignmentReport>(ENDPOINTS.REPORTS.ASSIGNMENTS(groupId));
-  return response.data;
-};
 
 /**
  * Get GitHub commit contribution report for a group.

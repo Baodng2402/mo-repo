@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
     View,
     Text,
@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@/components/icons';
 import { MaterialIcons } from '@/components/icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '@/navigation/AppNavigator';
 import { useUserStore } from '@/utils/stores/userStore';
@@ -84,6 +84,15 @@ const SettingsScreen = () => {
             routes: [{ name: 'SignIn' }],
         });
     };
+
+    useFocusEffect(
+        useCallback(() => {
+            return () => {
+                // Prevent stale full-screen modal overlay from blocking touches.
+                setShowLogoutModal(false);
+            };
+        }, []),
+    );
 
     return (
         <SafeAreaView className="flex-1 bg-[#101922]" edges={['top']}>

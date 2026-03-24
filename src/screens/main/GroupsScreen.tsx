@@ -9,7 +9,6 @@ import {
     RefreshControl,
     ActivityIndicator,
     InteractionManager,
-    Image,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@/components/icons';
@@ -17,7 +16,7 @@ import { MaterialIcons } from '@/components/icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { getGroups } from '@/services/groupService';
+import { getGroups, joinGroup } from '@/services/groupService';
 import { showError, showSuccess } from '@/utils/toast';
 import type { Group, GroupStatus } from '@/types/group';
 import type { RootStackParamList } from '@/navigation/AppNavigator';
@@ -134,10 +133,6 @@ const GroupsScreen = () => {
     const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
     // ── State ────────────────────────────────────────
-    // In real app, this would be derived from user store.
-    // For now, null = no group (browse public), non-null = user has a group.
-    const [myGroup, setMyGroup] = useState<Group | null>(null);
-
     const [publicGroups, setPublicGroups] = useState<Group[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -164,25 +159,10 @@ const GroupsScreen = () => {
 
                 if (!isMounted.current) return;
 
-                const allGroups = result.data;
-
-                // Simulate: if user already has a group, separate it out
-                // In production, use a dedicated endpoint like GET /api/groups/my-group
-                if (allGroups.length > 0 && !myGroup) {
-                    // For now, first group = user's group (remove this logic when BE is ready)
-                    setMyGroup(allGroups[0]);
-                    const remaining = allGroups.slice(1);
-                    if (pageNum === 1) {
-                        setPublicGroups(remaining);
-                    } else {
-                        setPublicGroups((prev) => [...prev, ...remaining]);
-                    }
+                if (pageNum === 1) {
+                    setPublicGroups(result.data);
                 } else {
-                    if (pageNum === 1) {
-                        setPublicGroups(allGroups);
-                    } else {
-                        setPublicGroups((prev) => [...prev, ...allGroups]);
-                    }
+                    setPublicGroups((prev) => [...prev, ...result.data]);
                 }
 
                 setPage(pageNum);
@@ -198,7 +178,7 @@ const GroupsScreen = () => {
                 }
             }
         },
-        [searchQuery, myGroup],
+        [searchQuery],
     );
 
     useFocusEffect(
@@ -235,14 +215,16 @@ const GroupsScreen = () => {
     );
 
     const handleJoinRequest = useCallback(
-        (_groupId: string, groupName: string) => {
-            // TODO: Call API to send join request
-            showSuccess(
-                `Join request sent to ${groupName}. Wait for the leader to accept.`,
-                'Request Sent 🎉',
-            );
+        async (groupId: string, groupName: string) => {
+            try {
+                await joinGroup(groupId);
+                showSuccess(`Joined ${groupName} successfully`, 'Enrolled 🎉');
+                fetchGroups(1, true);
+            } catch (error: any) {
+                showError(error.response?.data?.message || 'Failed to join group');
+            }
         },
-        [],
+        [fetchGroups],
     );
 
     const handleCreatePress = useCallback(() => {
@@ -282,88 +264,6 @@ const GroupsScreen = () => {
 
     const ListEmpty = useMemo(() => <EmptyState />, []);
 
-    // ── My Group Header (shown above public groups list) ──
-
-    const ListHeader = useMemo(() => {
-        if (!myGroup) return null;
-
-        const statusCfg = STATUS_CONFIG[myGroup.status] || STATUS_CONFIG.ACTIVE;
-
-        return (
-            <View className="mb-5">
-                {/* My Group Label */}
-                <Text className="text-white text-lg font-semibold mb-3">My Group</Text>
-
-                {/* My Group Card */}
-                <TouchableOpacity
-                    activeOpacity={0.9}
-                    onPress={() => handleGroupPress(myGroup.id)}
-                    className="bg-[#1A2332] rounded-2xl p-4"
-                >
-                    <View className="flex-row justify-between items-start">
-                        <View className="flex-1">
-                            <View className="flex-row items-center gap-2 mb-1.5">
-                                <View className={`px-2 py-0.5 rounded-md ${statusCfg.bg}`}>
-                                    <Text
-                                        className={`text-[10px] font-semibold ${statusCfg.color}`}
-                                    >
-                                        {statusCfg.label}
-                                    </Text>
-                                </View>
-                                {myGroup.semester && (
-                                    <Text className="text-gray-500 text-xs">
-                                        {myGroup.semester}
-                                    </Text>
-                                )}
-                            </View>
-                            <Text className="text-white text-xl font-bold">{myGroup.name}</Text>
-                            {myGroup.project_name && (
-                                <Text className="text-gray-400 text-sm mt-0.5">
-                                    {myGroup.project_name}
-                                </Text>
-                            )}
-                        </View>
-                        <Feather name="chevron-right" size={20} color="#475569" />
-                    </View>
-
-                    {/* Integration Tags */}
-                    {(myGroup.jira_project_key || myGroup.github_repo_url) && (
-                        <View className="flex-row gap-1.5 mt-3">
-                            {myGroup.jira_project_key && (
-                                <View className="bg-[#0052CC]/15 px-2.5 py-1 rounded-lg">
-                                    <Text className="text-[#4C9AFF] text-xs font-medium">
-                                        Jira: {myGroup.jira_project_key}
-                                    </Text>
-                                </View>
-                            )}
-                            {myGroup.github_repo_url && (
-                                <View className="bg-[#7C3AED]/15 px-2.5 py-1 rounded-lg">
-                                    <Text className="text-[#7C3AED] text-xs font-medium">
-                                        GitHub
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
-                    )}
-
-                    {/* Footer */}
-                    <View className="flex-row items-center gap-1 mt-4 pt-3 border-t border-white/5">
-                        <MaterialIcons name="group" size={16} color="#64748B" />
-                        <Text className="text-gray-400 text-xs">
-                            {myGroup.members_count} member
-                            {myGroup.members_count !== 1 ? 's' : ''}
-                        </Text>
-                    </View>
-                </TouchableOpacity>
-
-                {/* Divider + "Browse Teams" label */}
-                <Text className="text-gray-600 text-xs font-semibold mt-6 mb-2 ml-1">
-                    OTHER TEAMS
-                </Text>
-            </View>
-        );
-    }, [myGroup, handleGroupPress]);
-
     // ── Main Render ──────────────────────────────────
 
     return (
@@ -374,23 +274,19 @@ const GroupsScreen = () => {
             <View className="px-4 py-3 flex-row justify-between items-center">
                 <View>
                     <Text className="text-white text-2xl font-bold">
-                        {myGroup ? 'My Group' : 'Find a Group'}
+                        Groups
                     </Text>
                     <Text className="text-gray-400 text-sm mt-0.5">
-                        {myGroup
-                            ? 'Manage your project group'
-                            : 'Browse & join a team'}
+                        Browse and join a team
                     </Text>
                 </View>
-                {!myGroup && (
-                    <TouchableOpacity
-                        onPress={handleCreatePress}
-                        activeOpacity={0.8}
-                        className="w-10 h-10 bg-[#7C3AED] rounded-xl items-center justify-center"
-                    >
-                        <Feather name="plus" size={20} color="#fff" />
-                    </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                    onPress={handleCreatePress}
+                    activeOpacity={0.8}
+                    className="w-10 h-10 bg-[#7C3AED] rounded-xl items-center justify-center"
+                >
+                    <Feather name="plus" size={20} color="#fff" />
+                </TouchableOpacity>
             </View>
 
             {/* Search (only when browsing public groups or always visible) */}
@@ -411,7 +307,7 @@ const GroupsScreen = () => {
                         onBlur={() => setSearchFocused(false)}
                         onSubmitEditing={() => fetchGroups(1)}
                         returnKeyType="search"
-                        placeholder={myGroup ? 'Search teams...' : 'Search available groups...'}
+                        placeholder="Search groups..."
                         placeholderTextColor="#64748B"
                         className="flex-1 ml-2 text-white text-sm"
                     />
@@ -430,7 +326,7 @@ const GroupsScreen = () => {
                 </View>
             ) : (
                 <FlatList
-                    data={myGroup ? publicGroups : publicGroups}
+                    data={publicGroups}
                     renderItem={renderPublicGroup}
                     keyExtractor={keyExtractor}
                     contentContainerStyle={{
@@ -454,7 +350,6 @@ const GroupsScreen = () => {
                     }
                     onEndReached={onLoadMore}
                     onEndReachedThreshold={0.3}
-                    ListHeaderComponent={ListHeader}
                     ListFooterComponent={ListFooter}
                     ListEmptyComponent={ListEmpty}
                 />

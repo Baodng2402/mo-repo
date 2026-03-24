@@ -8,6 +8,7 @@ import { MaterialIcons } from '@/components/icons';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { OAUTH_REDIRECT_URI } from '@env';
 import { showSuccess, showError } from '../../utils/toast';
 import { useUserStore } from '../../utils/stores/userStore';
 import {
@@ -27,6 +28,19 @@ const REDIRECT_CONFIG = {
   scheme: 'jihub',
   path: 'auth/callback',
 } as const;
+
+const getOAuthRedirectUri = () => {
+  const configuredRedirectUri = OAUTH_REDIRECT_URI?.trim();
+
+  if (configuredRedirectUri) {
+    return configuredRedirectUri;
+  }
+
+  return AuthSession.makeRedirectUri({
+    ...REDIRECT_CONFIG,
+    native: 'jihub://auth/callback',
+  });
+};
 
 // === COMPONENTS ===
 interface AccountCardProps {
@@ -94,6 +108,24 @@ const LinkThirdPartyScreen = ({ navigation }: Props) => {
 
   const saveUserToStore = useUserStore((state) => state.login);
 
+  const syncLinkedStatus = async (
+    provider: 'github' | 'jira',
+    setLinked: (value: boolean) => void
+  ) => {
+    try {
+      const linkedAccounts = await getLinkedAccounts();
+      const targetProvider = provider.toUpperCase();
+      const isLinked = linkedAccounts.some((acc) => acc.provider === targetProvider);
+
+      if (isLinked) {
+        setLinked(true);
+        showSuccess('Success', `${provider} account linked successfully!`);
+      }
+    } catch (error) {
+      console.error(`[${provider.toUpperCase()}] Failed to refresh linked status:`, error);
+    }
+  };
+
   // Generic OAuth handler to reduce duplication
   const handleOAuthConnect = async (
     provider: 'github' | 'jira',
@@ -102,7 +134,7 @@ const LinkThirdPartyScreen = ({ navigation }: Props) => {
   ) => {
     if (isLoading) return;
 
-    const redirectUri = AuthSession.makeRedirectUri(REDIRECT_CONFIG);
+    const redirectUri = getOAuthRedirectUri();
     console.log(`[${provider.toUpperCase()}] Redirect URI:`, redirectUri);
 
     try {
@@ -112,14 +144,23 @@ const LinkThirdPartyScreen = ({ navigation }: Props) => {
 
       console.log(`[${provider.toUpperCase()}] Opening auth session:`, authUrl);
 
+      if (provider === 'jira') {
+        // Jira flow can end on a non-app callback URL; avoid waiting for deep-link callback.
+        await WebBrowser.openBrowserAsync(authUrl);
+        await syncLinkedStatus(provider, setLinked);
+        return;
+      }
+
       const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
 
       if (result.type === 'success' && result.url) {
         await handleOAuthSuccess(result.url, provider, setLinked);
       } else if (result.type === 'cancel') {
         console.log(`[${provider.toUpperCase()}] Auth cancelled by user`);
+        await syncLinkedStatus(provider, setLinked);
       } else if (result.type === 'dismiss') {
         console.log(`[${provider.toUpperCase()}] Auth dismissed`);
+        await syncLinkedStatus(provider, setLinked);
       }
     } catch (error) {
       console.error(`[${provider.toUpperCase()}] OAuth error:`, error);

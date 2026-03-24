@@ -40,15 +40,29 @@ axiosClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const config = error.config;
-    console.log(`[API ERROR] ${config?.method?.toUpperCase()} ${config?.url}`);
+    const status = error.response?.status;
+    const expectedStatuses: number[] = (config as any)?.expectedErrorStatuses || [];
+    const isExpectedStatus = typeof status === 'number' && expectedStatuses.includes(status);
+    const shouldLog = !isExpectedStatus;
+
+    if (shouldLog) {
+      console.log(`[API ERROR] ${config?.method?.toUpperCase()} ${config?.url}`);
+    }
 
     if (error.response) {
-      console.log('Status:', error.response.status);
+      if (shouldLog) {
+        console.log('Status:', error.response.status);
+      }
 
       // Token expired or invalid → auto logout
       if (error.response.status === 401) {
-        await AsyncStorage.removeItem('access_token');
-        // The app will redirect to SignIn on next navigation or re-render
+        const provider = error.response?.data?.provider;
+        const isIntegration401 = provider === 'JIRA' || provider === 'GITHUB';
+
+        if (!isIntegration401) {
+          await AsyncStorage.removeItem('access_token');
+          // The app will redirect to SignIn on next navigation or re-render
+        }
       }
     }
 

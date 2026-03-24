@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
+    Alert,
     View,
     Text,
     ScrollView,
@@ -11,6 +12,7 @@ import {
     InteractionManager,
     Modal,
     Pressable,
+    TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@/components/icons';
@@ -27,9 +29,18 @@ import {
     deleteGroup,
     getGroupRepos,
 } from '@/services/groupService';
+import { getJiraProjects } from '@/services/jiraService';
 import { getContributorStats, getCommits } from '@/services/githubService';
-import { getAssignmentReport, type AssignmentItem } from '@/services/reportService';
-import { showSuccess, showError } from '@/utils/toast';
+import {
+    createTask,
+    deleteTask,
+    getTasksPaginated,
+    updateTask,
+    type TaskItem,
+    type TaskPriority,
+    type TaskStatus,
+} from '@/services/taskService';
+import { showSuccess, showError, showInfo } from '@/utils/toast';
 import type { GroupDetail, GroupMember, MembershipRole } from '@/types/group';
 import type { ContributorStat, GroupRepo } from '@/types/github';
 import type { JiraTaskStatus } from '@/types/activity';
@@ -60,11 +71,34 @@ const STATUS_COLORS: Record<string, string> = {
     COMPLETED: '#3B82F6',
 };
 
-const normalizeStatus = (status: string): JiraTaskStatus => {
-    const s = status.toUpperCase();
-    if (s.includes('DONE')) return 'DONE';
-    if (s.includes('PROGRESS') || s.includes('IN_')) return 'IN_PROGRESS';
-    return 'TO_DO';
+
+const PRIORITY_OPTIONS: TaskPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+// Status options for EDIT only — create status is controlled by BE based on assignee
+const EDIT_STATUS_OPTIONS: TaskStatus[] = ['IN_PROGRESS', 'DONE', 'BLOCKED'];
+const TASK_PAGE_SIZE = 30;
+
+// Quick move: IN_PROGRESS → DONE → IN_PROGRESS (reopen)
+// TO_DO tasks (unassigned) advance to IN_PROGRESS by quick-assign logic
+const getNextStatus = (status: TaskStatus): TaskStatus => {
+    if (status === 'TO_DO') return 'IN_PROGRESS';
+    if (status === 'IN_PROGRESS') return 'DONE';
+    if (status === 'DONE') return 'IN_PROGRESS'; // reopen
+    return 'IN_PROGRESS'; // BLOCKED → unblock
+};
+
+const getValidJiraSiteOrigin = (rawUrl?: string | null): string | null => {
+    if (!rawUrl) return null;
+
+    try {
+        const parsed = new URL(rawUrl);
+        if (!parsed.hostname.toLowerCase().endsWith('.atlassian.net')) {
+            return null;
+        }
+
+        return parsed.origin;
+    } catch {
+        return null;
+    }
 };
 
 // ==================== Component ====================
@@ -77,13 +111,29 @@ const GroupDetailScreen = () => {
     const currentUser = useUserStore((s) => s.userInfo);
     const [group, setGroup] = useState<GroupDetail | null>(null);
     const [loading, setLoading] = useState(true);
+    const [jiraSiteUrl, setJiraSiteUrl] = useState<string | null>(null);
 
     // GitHub linked repos & contributor stats
     const [linkedRepos, setLinkedRepos] = useState<GroupRepo[]>([]);
     const [contributorStats, setContributorStats] = useState<ContributorStat[]>([]);
     const [loadingStats, setLoadingStats] = useState(false);
-    const [groupTasks, setGroupTasks] = useState<AssignmentItem[]>([]);
+    const [groupTasks, setGroupTasks] = useState<TaskItem[]>([]);
     const [loadingTasks, setLoadingTasks] = useState(false);
+    const [loadingMoreTasks, setLoadingMoreTasks] = useState(false);
+    const [taskPage, setTaskPage] = useState(1);
+    const [hasMoreTasks, setHasMoreTasks] = useState(false);
+    const [taskFallbackWarning, setTaskFallbackWarning] = useState('');
+    const [taskSyncWarning, setTaskSyncWarning] = useState('');
+    const [crudEnabled, setCrudEnabled] = useState(true);
+    const [isTaskFormVisible, setTaskFormVisible] = useState(false);
+    const [savingTask, setSavingTask] = useState(false);
+    const [editingTask, setEditingTask] = useState<TaskItem | null>(null);
+    const [formTitle, setFormTitle] = useState('');
+    const [formDescription, setFormDescription] = useState('');
+    const [formPriority, setFormPriority] = useState<TaskPriority>('MEDIUM');
+    const [formStatus, setFormStatus] = useState<TaskStatus>('IN_PROGRESS');
+    const [formDueDate, setFormDueDate] = useState('');
+    const [formAssigneeId, setFormAssigneeId] = useState<string | null>(null);
 
     // ── Derived State ───────────────────────────────
 
@@ -96,6 +146,69 @@ const GroupDetailScreen = () => {
     const canRemove = (target: GroupMember) =>
         currentRank > (ROLE_RANK[target.role_in_group] ?? 0);
 
+
+
+    const fetchTasks = useCallback(
+        async (reset: boolean, jiraProjectKey?: string) => {
+            const targetPage = reset ? 1 : taskPage + 1;
+
+            if (!reset) {
+                if (loadingMoreTasks || !hasMoreTasks || !crudEnabled) return;
+                setLoadingMoreTasks(true);
+            } else {
+                setLoadingTasks(true);
+                setTaskFallbackWarning('');
+            }
+
+            try {
+                const paginated = await getTasksPaginated({
+                    group_id: groupId,
+                    page: targetPage,
+                    limit: TASK_PAGE_SIZE,
+                });
+
+                setCrudEnabled(true);
+                setTaskFallbackWarning('');
+                setTaskSyncWarning('');
+                setTaskPage(paginated.meta.page);
+                setHasMoreTasks(paginated.meta.page < paginated.meta.total_pages);
+                setGroupTasks((prev) =>
+                    reset ? paginated.data : [...prev, ...paginated.data],
+                );
+
+                if (reset && (jiraProjectKey || group?.jira_project_key)) {
+                    const hasUnlinkedTasks = paginated.data.some((task) => {
+                        const key = task.key?.trim();
+                        return !key || !key.includes('-');
+                    });
+                    // Only warn if some tasks are missing Jira key (e.g. created before sync was enabled)
+                    if (hasUnlinkedTasks && paginated.data.length > 0) {
+                        setTaskSyncWarning(
+                            'Some tasks predate Jira sync — they will be linked to Jira on next update.',
+                        );
+                    }
+                }
+            } catch (taskError: any) {
+                if (reset) {
+                    setGroupTasks([]);
+                    setCrudEnabled(false);
+                    setTaskPage(1);
+                    setHasMoreTasks(false);
+                    setTaskSyncWarning('');
+                }
+
+                showError(taskError?.response?.data?.message || 'Failed to load tasks');
+            } finally {
+                if (reset) {
+                    setLoadingTasks(false);
+                } else {
+                    setLoadingMoreTasks(false);
+                }
+            }
+        },
+        [crudEnabled, groupId, hasMoreTasks, loadingMoreTasks, taskPage],
+    );
+
     // ── Fetch Data ──────────────────────────────────
 
     const fetchGroup = useCallback(async () => {
@@ -104,10 +217,30 @@ const GroupDetailScreen = () => {
             const data = await getGroupById(groupId);
             setGroup(data);
 
-            setLoadingTasks(true);
-            const assignmentReport = await getAssignmentReport(groupId).catch(() => null);
-            setGroupTasks(assignmentReport?.assignments || []);
-            setLoadingTasks(false);
+            // Fetch Jira site URL for deep-link badge (fire-and-forget)
+            // Uses project.self which contains the actual Jira site URL
+            // e.g. https://yoursite.atlassian.net/rest/api/3/project/10000
+            if (data.jira_project_key) {
+                getJiraProjects().then((projects) => {
+                    const normalizedProjectKey = data.jira_project_key?.trim().toUpperCase();
+                    const match = projects.find(
+                        (p) => p.key?.trim().toUpperCase() === normalizedProjectKey,
+                    );
+                    console.log('[Jira] project self:', match?.self);
+
+                    const siteOrigin =
+                        getValidJiraSiteOrigin(match?.siteUrl) ||
+                        getValidJiraSiteOrigin(match?.self);
+
+                    if (siteOrigin) {
+                        setJiraSiteUrl(siteOrigin);
+                        return;
+                    }
+                }).catch(() => {});
+                
+            }
+
+            await fetchTasks(true, data.jira_project_key);
 
             // Fetch linked repos + stats
             try {
@@ -130,7 +263,7 @@ const GroupDetailScreen = () => {
                     if (match) {
                         owner = match[1];
                         repoName = match[2].replace(/\.git$/, '');
-                    }
+                    }   
                 }
 
                 if (owner && repoName) {
@@ -181,7 +314,7 @@ const GroupDetailScreen = () => {
         } finally {
             setLoading(false);
         }
-    }, [groupId, navigation]);
+    }, [fetchTasks, groupId, navigation]);
 
     useFocusEffect(
         useCallback(() => {
@@ -201,6 +334,152 @@ const GroupDetailScreen = () => {
                 showError('Cannot open this URL'),
             );
         }
+    };
+
+    /** Open Jira project board in system browser */
+    const handleOpenJira = async () => {
+        const projectKey = group?.jira_project_key?.trim();
+        if (!projectKey) {
+            showError('Jira project key is missing');
+            return;
+        }
+
+        const validJiraSiteUrl = getValidJiraSiteOrigin(jiraSiteUrl);
+        const projectUrl = validJiraSiteUrl
+            ? `${validJiraSiteUrl}/jira/software/projects/${encodeURIComponent(projectKey)}/summary`
+            : null;
+        const fallbackUrl = 'https://start.atlassian.com';
+
+        try {
+            if (projectUrl) {
+                const canOpenProjectUrl = await Linking.canOpenURL(projectUrl);
+                if (canOpenProjectUrl) {
+                    await Linking.openURL(projectUrl);
+                    return;
+                }
+            }
+
+            await Linking.openURL(fallbackUrl);
+            showInfo(
+                'Could not resolve project site, opened Atlassian home instead.',
+            );
+        } catch {
+            showError('Cannot open Jira URL');
+        }
+    };
+
+    const openCreateTaskModal = () => {
+        setEditingTask(null);
+        setFormTitle('');
+        setFormDescription('');
+        setFormPriority('MEDIUM');
+        setFormStatus('IN_PROGRESS');
+        setFormDueDate('');
+        setFormAssigneeId(null);
+        setTaskFormVisible(true);
+    };
+
+    const openEditTaskModal = (task: TaskItem) => {
+        setEditingTask(task);
+        setFormTitle(task.title || '');
+        setFormDescription(task.description || '');
+        setFormPriority(task.priority || 'MEDIUM');
+        // Normalise: TO_DO is auto, so default edit status to IN_PROGRESS if task is unassigned TODO
+        setFormStatus(task.status === 'TO_DO' ? 'IN_PROGRESS' : (task.status || 'IN_PROGRESS'));
+        setFormDueDate(task.due_at ? task.due_at.slice(0, 10) : '');
+        // Pre-fill assignee from current task assignee_name lookup
+        const matched = group?.members.find((m) => m.full_name === task.assignee_name || m.email === task.assignee_name);
+        setFormAssigneeId(matched?.id ?? null);
+        setTaskFormVisible(true);
+    };
+
+    const handleSaveTask = async () => {
+        if (!formTitle.trim()) {
+            showError('Task title is required');
+            return;
+        }
+
+        try {
+            setSavingTask(true);
+
+            if (editingTask) {
+                await updateTask(editingTask.id, {
+                    title: formTitle.trim(),
+                    description: formDescription.trim() || undefined,
+                    priority: formPriority,
+                    status: formStatus,
+                    assignee_id: formAssigneeId ?? undefined,
+                    due_at: formDueDate.trim() || undefined,
+                });
+                showSuccess(
+                    group?.jira_project_key
+                        ? 'Task updated & synced to Jira'
+                        : 'Task updated successfully',
+                );
+            } else {
+                await createTask({
+                    group_id: groupId,
+                    title: formTitle.trim(),
+                    description: formDescription.trim() || undefined,
+                    priority: formPriority,
+                    assignee_id: formAssigneeId ?? undefined,
+                    due_at: formDueDate.trim() || undefined,
+                    // status intentionally omitted — BE auto-sets based on assignee
+                });
+                showSuccess(
+                    group?.jira_project_key
+                        ? `Task created & Jira issue opened${formAssigneeId ? ' · assigned' : ''}`
+                        : 'Task created successfully',
+                );
+            }
+
+            setTaskFormVisible(false);
+            fetchTasks(true);
+        } catch (error: any) {
+            showError(error?.response?.data?.message || 'Failed to save task');
+        } finally {
+            setSavingTask(false);
+        }
+    };
+
+    const handleDeleteTask = (task: TaskItem) => {
+        if (!crudEnabled) return;
+
+        Alert.alert('Delete task', `Delete "${task.title}"?`, [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: async () => {
+                    try {
+                        await deleteTask(task.id);
+                        showSuccess('Task deleted successfully');
+                        fetchTasks(true);
+                    } catch (error: any) {
+                        showError(error?.response?.data?.message || 'Failed to delete task');
+                    }
+                },
+            },
+        ]);
+    };
+
+    const handleQuickMoveTask = async (task: TaskItem) => {
+        const next = getNextStatus(task.status);
+        try {
+            await updateTask(task.id, { status: next });
+            showSuccess(
+                group?.jira_project_key
+                    ? `Moved to ${next.replace('_', ' ')} · Jira synced`
+                    : `Moved to ${next.replace('_', ' ')}`,
+            );
+            fetchTasks(true);
+        } catch (error: any) {
+            showError(error?.response?.data?.message || 'Failed to update task status');
+        }
+    };
+
+    const handleLoadMoreTasks = () => {
+        fetchTasks(false);
     };
 
     // ── Modal State Machine ─────────────────────────
@@ -304,25 +583,6 @@ const GroupDetailScreen = () => {
     const openMemberActions = (member: GroupMember) => {
         selectedMemberRef.current = member;
         setShowActionSheet(true);
-    };
-
-    // ── Render: Status Badge ────────────────────────
-
-    const renderStatusBadge = (status: JiraTaskStatus) => {
-        const cfg = JIRA_STATUS_CONFIG[status];
-        return (
-            <View
-                className="px-2 py-0.5 rounded-md"
-                style={{ backgroundColor: cfg.bg + '20' }}
-            >
-                <Text
-                    className="text-[10px] font-bold"
-                    style={{ color: cfg.color }}
-                >
-                    {cfg.label}
-                </Text>
-            </View>
-        );
     };
 
     // ── Render: Member Row ──────────────────────────
@@ -472,6 +732,22 @@ const GroupDetailScreen = () => {
                         </View>
                     )}
 
+                    {group.topic?.name && (
+                        <View className="mb-3">
+                            <Text className="text-gray-500 text-[11px] uppercase tracking-wider mb-1">
+                                Topic
+                            </Text>
+                            <Text className="text-white font-semibold text-[15px]">
+                                {group.topic.name}
+                            </Text>
+                            {!!group.topic.description && (
+                                <Text className="text-gray-400 text-sm leading-5 mt-1">
+                                    {group.topic.description}
+                                </Text>
+                            )}
+                        </View>
+                    )}
+
                     {group.description && (
                         <View className="mb-3">
                             <Text className="text-gray-500 text-[11px] uppercase tracking-wider mb-1">
@@ -504,12 +780,17 @@ const GroupDetailScreen = () => {
                     {(group.jira_project_key || group.github_repo_url) && (
                         <View className="flex-row gap-2 mt-4 pt-3 border-t border-white/5">
                             {group.jira_project_key && (
-                                <View className="bg-[#0052CC]/15 px-3 py-2 rounded-xl flex-row items-center gap-1.5">
+                                <TouchableOpacity
+                                    onPress={handleOpenJira}
+                                    activeOpacity={0.7}
+                                    className="bg-[#0052CC]/15 px-3 py-2 rounded-xl flex-row items-center gap-1.5"
+                                >
                                     <MaterialIcons name="dashboard" size={14} color="#4C9AFF" />
                                     <Text className="text-[#4C9AFF] text-xs font-semibold">
                                         {group.jira_project_key}
                                     </Text>
-                                </View>
+                                    <Feather name="external-link" size={11} color="#4C9AFF" />
+                                </TouchableOpacity>
                             )}
                             {group.github_repo_url && (
                                 <TouchableOpacity
@@ -529,6 +810,15 @@ const GroupDetailScreen = () => {
 
                     {/* Quick Actions */}
                     <View className="mt-4 pt-3 border-t border-white/5 flex-row gap-2">
+                        {isLeader && (
+                            <TouchableOpacity
+                                onPress={() => navigation.navigate('TopicLab', { groupId: group.id })}
+                                className="flex-1 bg-[#243447] rounded-xl py-2.5 items-center"
+                                activeOpacity={0.8}
+                            >
+                                <Text className="text-[#F59E0B] text-xs font-semibold">Topic Lab</Text>
+                            </TouchableOpacity>
+                        )}
                         <TouchableOpacity
                             onPress={() => navigation.navigate('Documents', { groupId: group.id })}
                             className="flex-1 bg-[#243447] rounded-xl py-2.5 items-center"
@@ -670,21 +960,51 @@ const GroupDetailScreen = () => {
 
                 {/* ── Task Tracker Section ─────────────── */}
                 <View className="mx-4 mt-4">
-                    <View className="flex-row items-center gap-2 mb-3">
-                        <MaterialIcons name="assignment" size={18} color="#4C9AFF" />
-                        <Text className="text-white text-base font-bold">
-                            Task Tracker
-                        </Text>
+                    <View className="flex-row items-center justify-between mb-3">
+                        <View className="flex-row items-center gap-2">
+                            <MaterialIcons name="task" size={18} color="#4C9AFF" />
+                            <Text className="text-white text-base font-bold">
+                                Group Tasks
+                            </Text>
+                        </View>
+                        {isLeader && (
+                            <TouchableOpacity
+                                onPress={openCreateTaskModal}
+                                className={`px-3 py-2 rounded-lg ${crudEnabled ? 'bg-[#4C9AFF]/20' : 'bg-[#334155]'}`}
+                                activeOpacity={0.8}
+                            >
+                                <Text className={`text-xs font-semibold ${crudEnabled ? 'text-[#93C5FD]' : 'text-gray-400'}`}>
+                                    + New Task
+                                </Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
 
                     <View className="bg-[#1A2332] rounded-2xl p-4">
+                        {!!taskSyncWarning && crudEnabled && (
+                            <View className="mb-4 bg-[#1E293B] rounded-xl p-3 border border-[#334155]">
+                                <Text className="text-[#FCD34D] text-xs font-semibold">Jira sync notice</Text>
+                                <Text className="text-gray-400 text-xs mt-1">{taskSyncWarning}</Text>
+                            </View>
+                        )}
+
+                        {!crudEnabled && (
+                            <View className="mb-4 bg-[#243447] rounded-xl p-3 border border-[#334155]">
+                                <Text className="text-[#FCD34D] text-xs font-semibold">Read-only mode</Text>
+                                <Text className="text-gray-400 text-xs mt-1">
+                                    {taskFallbackWarning ||
+                                        'BE task CRUD endpoints are not available yet. Showing Jira report data only.'}
+                                </Text>
+                            </View>
+                        )}
+
                         {/* Summary bar: count per status */}
                         <View className="flex-row gap-2 mb-4">
                             {(['TO_DO', 'IN_PROGRESS', 'DONE'] as JiraTaskStatus[]).map(
                                 (status) => {
                                     const cfg = JIRA_STATUS_CONFIG[status];
                                     const count = groupTasks.filter(
-                                        (t) => normalizeStatus(t.status) === status,
+                                        (t) => t.status === status,
                                     ).length;
                                     return (
                                         <View
@@ -711,37 +1031,114 @@ const GroupDetailScreen = () => {
                         {loadingTasks ? (
                             <ActivityIndicator size="small" color="#4C9AFF" style={{ paddingVertical: 12 }} />
                         ) : groupTasks.length > 0 ? (
-                            groupTasks.map((task, idx) => (
-                                <View
-                                    key={task.key}
-                                    className={`flex-row items-center justify-between py-3 ${idx < groupTasks.length - 1
-                                        ? 'border-b border-white/5'
-                                        : ''
-                                        }`}
-                                >
-                                    <View className="flex-1 mr-3">
-                                        <View className="flex-row items-center gap-2 mb-1">
-                                            <Text className="text-gray-500 text-[10px] font-mono">
-                                                {task.key}
+                            groupTasks.map((task, idx) => {
+                                const cfg = JIRA_STATUS_CONFIG[task.status as JiraTaskStatus] ?? JIRA_STATUS_CONFIG.IN_PROGRESS;
+                                const hasJiraKey = !!task.key?.includes('-');
+                                return (
+                                    <View
+                                        key={task.id}
+                                        className={`flex-row items-center justify-between py-3 ${idx < groupTasks.length - 1 ? 'border-b border-white/5' : ''}`}
+                                    >
+                                        <View className="flex-1 mr-3">
+                                            {/* Key + status row */}
+                                            <View className="flex-row items-center gap-2 mb-1 flex-wrap">
+                                                {hasJiraKey ? (
+                                                    <View className="bg-[#0052CC]/20 px-1.5 py-0.5 rounded">
+                                                        <Text className="text-[#4C9AFF] text-[10px] font-bold font-mono">
+                                                            {task.key}
+                                                        </Text>
+                                                    </View>
+                                                ) : group?.jira_project_key ? (
+                                                    <View className="bg-[#F59E0B]/20 px-1.5 py-0.5 rounded flex-row items-center gap-1">
+                                                        <MaterialIcons name="sync-problem" size={10} color="#F59E0B" />
+                                                        <Text className="text-[#F59E0B] text-[10px] font-semibold">
+                                                            Chưa sync
+                                                        </Text>
+                                                    </View>
+                                                ) : null}
+                                                <View
+                                                    className="px-2 py-0.5 rounded-md"
+                                                    style={{ backgroundColor: cfg.color + '25' }}
+                                                >
+                                                    <Text className="text-[10px] font-bold" style={{ color: cfg.color }}>
+                                                        {cfg.label}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                            <Text className="text-white text-sm font-medium" numberOfLines={1}>
+                                                {task.title}
                                             </Text>
-                                            {renderStatusBadge(normalizeStatus(task.status))}
+                                            <View className="flex-row items-center gap-1.5 mt-1">
+                                                <MaterialIcons
+                                                    name="person"
+                                                    size={11}
+                                                    color={task.assignee_name ? '#60A5FA' : '#475569'}
+                                                />
+                                                <Text
+                                                    className={`text-[11px] ${task.assignee_name ? 'text-blue-400' : 'text-gray-600'}`}
+                                                    numberOfLines={1}
+                                                >
+                                                    {task.assignee_name || 'Unassigned'}
+                                                </Text>
+                                            </View>
                                         </View>
-                                        <Text className="text-white text-sm" numberOfLines={1}>
-                                            {task.summary}
-                                        </Text>
-                                        <Text className="text-gray-500 text-[10px] mt-1" numberOfLines={1}>
-                                            {task.assignee || 'Unassigned'}
-                                        </Text>
+                                        {isLeader && (
+                                            <View className="gap-1">
+                                                {/* Quick move — label changes based on current status */}
+                                                {task.status !== 'BLOCKED' && (
+                                                    <TouchableOpacity
+                                                        onPress={() => handleQuickMoveTask(task)}
+                                                        className="w-8 h-8 rounded-lg bg-[#243447] items-center justify-center"
+                                                        activeOpacity={0.8}
+                                                    >
+                                                        <Feather
+                                                            name={task.status === 'DONE' ? 'rotate-ccw' : 'arrow-right'}
+                                                            size={14}
+                                                            color="#A78BFA"
+                                                        />
+                                                    </TouchableOpacity>
+                                                )}
+                                                <TouchableOpacity
+                                                    onPress={() => openEditTaskModal(task)}
+                                                    className="w-8 h-8 rounded-lg bg-[#243447] items-center justify-center"
+                                                    activeOpacity={0.8}
+                                                >
+                                                    <Feather name="edit-2" size={14} color="#93C5FD" />
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    onPress={() => handleDeleteTask(task)}
+                                                    className="w-8 h-8 rounded-lg bg-[#243447] items-center justify-center"
+                                                    activeOpacity={0.8}
+                                                >
+                                                    <Feather name="trash-2" size={14} color="#F87171" />
+                                                </TouchableOpacity>
+                                            </View>
+                                        )}
                                     </View>
-                                </View>
-                            ))
+                                );
+                            })
                         ) : (
                             <View className="mt-1 bg-[#243447] rounded-xl p-3 flex-row items-center gap-2">
                                 <MaterialIcons name="info-outline" size={14} color="#64748B" />
                                 <Text className="text-gray-500 text-xs flex-1">
-                                    No Jira tasks available for this group yet.
+                                    No tasks available for this group yet.
                                 </Text>
                             </View>
+                        )}
+
+                        {crudEnabled && hasMoreTasks && (
+                            <TouchableOpacity
+                                onPress={handleLoadMoreTasks}
+                                className="mt-4 bg-[#243447] rounded-xl py-2.5 items-center"
+                                activeOpacity={0.8}
+                                disabled={loadingMoreTasks}
+                            >
+                                {loadingMoreTasks ? (
+                                    <ActivityIndicator size="small" color="#93C5FD" />
+                                ) : (
+                                    <Text className="text-[#93C5FD] text-xs font-semibold">Load more tasks</Text>
+                                )}
+                            </TouchableOpacity>
                         )}
                     </View>
                 </View>
@@ -817,6 +1214,168 @@ const GroupDetailScreen = () => {
                     )}
                 </View>
             </ScrollView>
+
+            <Modal
+                visible={isTaskFormVisible}
+                animationType="slide"
+                transparent
+                onRequestClose={() => setTaskFormVisible(false)}
+            >
+                <View className="flex-1 bg-black/60 justify-end">
+                    <ScrollView
+                        className="bg-[#101922] rounded-t-3xl border-t border-white/10"
+                        contentContainerStyle={{ padding: 16, paddingBottom: 36 }}
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator={false}
+                    >
+                        {/* Header */}
+                        <View className="flex-row items-center justify-between mb-4">
+                            <View>
+                                <Text className="text-white text-lg font-bold">
+                                    {editingTask ? 'Edit Task' : 'New Task'}
+                                </Text>
+                                {!!group?.jira_project_key && (
+                                    <Text className="text-[#4C9AFF] text-[11px] mt-0.5">
+                                        Will sync to Jira · {group.jira_project_key}
+                                    </Text>
+                                )}
+                            </View>
+                            <TouchableOpacity onPress={() => setTaskFormVisible(false)} className="p-2">
+                                <Feather name="x" size={20} color="#fff" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {/* Title */}
+                        <Text className="text-gray-400 text-xs mb-1">Title *</Text>
+                        <TextInput
+                            value={formTitle}
+                            onChangeText={setFormTitle}
+                            placeholder="Task title"
+                            placeholderTextColor="#64748B"
+                            className="bg-[#1A2332] rounded-xl px-4 h-11 text-white text-sm mb-3"
+                        />
+
+                        {/* Description */}
+                        <Text className="text-gray-400 text-xs mb-1">Description</Text>
+                        <TextInput
+                            value={formDescription}
+                            onChangeText={setFormDescription}
+                            placeholder="Task details"
+                            placeholderTextColor="#64748B"
+                            multiline
+                            numberOfLines={3}
+                            textAlignVertical="top"
+                            className="bg-[#1A2332] rounded-xl px-4 py-3 text-white text-sm min-h-[72px] mb-3"
+                        />
+
+                        {/* Assignee picker */}
+                        <Text className="text-gray-400 text-xs mb-2">
+                            Assign to
+                            {!editingTask && (
+                                <Text className="text-gray-600"> · status auto-set by assignee</Text>
+                            )}
+                        </Text>
+                        <View className="flex-row flex-wrap gap-2 mb-3">
+                            {/* Unassign option */}
+                            <TouchableOpacity
+                                onPress={() => setFormAssigneeId(null)}
+                                className={`px-3 py-2 rounded-lg border ${!formAssigneeId ? 'border-slate-400 bg-slate-400/15' : 'border-white/10 bg-[#1A2332]'}`}
+                                activeOpacity={0.8}
+                            >
+                                <Text className={`text-xs font-semibold ${!formAssigneeId ? 'text-slate-300' : 'text-gray-500'}`}>
+                                    None
+                                </Text>
+                            </TouchableOpacity>
+                            {group?.members.map((m) => {
+                                const selected = formAssigneeId === m.id;
+                                return (
+                                    <TouchableOpacity
+                                        key={m.id}
+                                        onPress={() => setFormAssigneeId(m.id)}
+                                        className={`px-3 py-2 rounded-lg border flex-row items-center gap-1.5 ${selected ? 'border-[#4C9AFF] bg-[#4C9AFF]/20' : 'border-white/10 bg-[#1A2332]'}`}
+                                        activeOpacity={0.8}
+                                    >
+                                        <View className="w-4 h-4 rounded-full bg-[#243447] items-center justify-center">
+                                            <Text className="text-[8px] text-white font-bold">
+                                                {m.full_name?.charAt(0)?.toUpperCase()}
+                                            </Text>
+                                        </View>
+                                        <Text className={`text-xs font-semibold ${selected ? 'text-[#93C5FD]' : 'text-gray-300'}`} numberOfLines={1}>
+                                            {m.full_name?.split(' ').pop()}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        {/* Status — edit only, create is controlled by BE */}
+                        {!!editingTask && (
+                            <>
+                                <Text className="text-gray-400 text-xs mb-2">Status</Text>
+                                <View className="flex-row gap-2 mb-3">
+                                    {EDIT_STATUS_OPTIONS.map((s: TaskStatus) => (
+                                        <TouchableOpacity
+                                            key={s}
+                                            onPress={() => setFormStatus(s)}
+                                            className={`flex-1 py-2 rounded-lg border items-center ${formStatus === s ? 'border-[#4C9AFF] bg-[#4C9AFF]/20' : 'border-white/10 bg-[#1A2332]'}`}
+                                            activeOpacity={0.8}
+                                        >
+                                            <Text className={`text-xs font-semibold ${formStatus === s ? 'text-[#93C5FD]' : 'text-gray-300'}`}>
+                                                {s.replace('_', ' ')}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </>
+                        )}
+
+                        {/* Priority */}
+                        <Text className="text-gray-400 text-xs mb-2">Priority</Text>
+                        <View className="flex-row flex-wrap gap-2 mb-3">
+                            {PRIORITY_OPTIONS.map((priority) => (
+                                <TouchableOpacity
+                                    key={priority}
+                                    onPress={() => setFormPriority(priority)}
+                                    className={`px-3 py-2 rounded-lg border ${formPriority === priority ? 'border-[#4C9AFF] bg-[#4C9AFF]/20' : 'border-white/10 bg-[#1A2332]'}`}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text className={`text-xs font-semibold ${formPriority === priority ? 'text-[#93C5FD]' : 'text-gray-300'}`}>
+                                        {priority}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        {/* Due Date */}
+                        <Text className="text-gray-400 text-xs mb-1">Due Date (YYYY-MM-DD)</Text>
+                        <TextInput
+                            value={formDueDate}
+                            onChangeText={setFormDueDate}
+                            placeholder="2026-03-25"
+                            placeholderTextColor="#64748B"
+                            className="bg-[#1A2332] rounded-xl px-4 h-11 text-white text-sm mb-5"
+                        />
+
+                        <TouchableOpacity
+                            onPress={handleSaveTask}
+                            disabled={savingTask}
+                            className={`rounded-xl py-3.5 items-center flex-row justify-center gap-2 ${savingTask ? 'bg-[#334155]' : 'bg-[#2563EB]'}`}
+                            activeOpacity={0.8}
+                        >
+                            {savingTask ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <>
+                                    <Feather name={editingTask ? 'save' : 'plus'} size={16} color="#fff" />
+                                    <Text className="text-white font-semibold">
+                                        {editingTask ? 'Save Changes' : 'Create Task'}
+                                    </Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </ScrollView>
+                </View>
+            </Modal>
 
             {/* ═══════════════════════════════════════════════════
                 Confirm Modal (leave / delete / remove member)

@@ -1,184 +1,61 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
-    View,
-    Text,
+    ActivityIndicator,
     FlatList,
-    TouchableOpacity,
-    StatusBar,
     InteractionManager,
     RefreshControl,
-    ActivityIndicator,
+    StatusBar,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@/components/icons';
 import { MaterialIcons } from '@/components/icons';
-import { useFocusEffect } from '@react-navigation/native';
-import { getMyAssignmentFeed } from '@/services/studentService';
+import { getMyGroups } from '@/services/studentService';
+import type { Group } from '@/types/group';
+import type { RootStackParamList } from '@/navigation/AppNavigator';
 import { showError } from '@/utils/toast';
-import type { AssignmentItem } from '@/services/reportService';
-
-// ==================== Types ====================
-
-type TaskStatus = 'todo' | 'inProgress' | 'done';
-
-// ==================== Constants ====================
-
-const normalizeStatus = (status: string): TaskStatus => {
-    const s = status.toUpperCase();
-    if (s.includes('DONE')) return 'done';
-    if (s.includes('PROGRESS') || s.includes('IN_')) return 'inProgress';
-    return 'todo';
-};
-
-const COLUMNS: { key: TaskStatus; title: string; icon: string; color: string }[] = [
-    { key: 'todo', title: 'To Do', icon: 'circle', color: '#64748B' },
-    { key: 'inProgress', title: 'Progress', icon: 'clock', color: '#EAB308' },
-    { key: 'done', title: 'Done', icon: 'check-circle', color: '#22C55E' },
-];
-
-/** Tab bar height including padding (approx) */
-const TAB_BAR_HEIGHT = 80;
-
-// ==================== Memoized Components ====================
-
-/** Single task card with checkbox, priority dot, and deadline */
-const TaskCard = React.memo(
-    ({ task, isDone }: { task: AssignmentItem; isDone: boolean }) => {
-        const getPriorityStyle = (priority: string) => {
-            const p = priority.toUpperCase();
-            switch (p) {
-                case 'HIGH':
-                case 'HIGHEST':
-                case 'CRITICAL':
-                    return { dot: '#EF4444', text: 'text-red-400' };
-                case 'MEDIUM':
-                    return { dot: '#EAB308', text: 'text-yellow-400' };
-                default:
-                    return { dot: '#22C55E', text: 'text-green-400' };
-            }
-        };
-
-        const priority = getPriorityStyle(task.priority);
-
-        return (
-            <TouchableOpacity
-                activeOpacity={0.8}
-                className={`bg-[#1A2332] rounded-xl p-3 mb-2 flex-row items-center ${isDone ? 'opacity-60' : ''
-                    }`}
-            >
-                {/* Checkbox */}
-                <View
-                    className={`w-6 h-6 rounded-full border-2 items-center justify-center mr-3 ${isDone
-                            ? 'border-green-500 bg-green-500'
-                            : 'border-white/15 bg-transparent'
-                        }`}
-                >
-                    {isDone && <Feather name="check" size={14} color="#fff" />}
-                </View>
-
-                {/* Content */}
-                <View className="flex-1">
-                    <Text
-                        className={`text-sm font-medium ${isDone ? 'text-gray-500 line-through' : 'text-white'
-                            }`}
-                        numberOfLines={1}
-                    >
-                        {task.title}
-                    </Text>
-                    <View className="flex-row items-center gap-2 mt-1.5">
-                        <View className="flex-row items-center gap-1">
-                            <View
-                                className="w-1.5 h-1.5 rounded-full"
-                                style={{ backgroundColor: priority.dot }}
-                            />
-                            <Text
-                                className={`text-[10px] font-medium capitalize ${priority.text}`}
-                            >
-                                {task.priority}
-                            </Text>
-                        </View>
-                        <View className="flex-row items-center gap-1">
-                            <Text className="text-[10px] text-gray-500">#{task.key}</Text>
-                        </View>
-                    </View>
-                </View>
-
-                {/* Assignee */}
-                <View className="ml-2 px-2 py-1 rounded-md bg-[#243447]">
-                    <Text className="text-[10px] text-[#A78BFA]" numberOfLines={1}>
-                        {task.assignee || 'Unassigned'}
-                    </Text>
-                </View>
-            </TouchableOpacity>
-        );
-    },
-);
-
-// ==================== Main Component ====================
 
 const TasksScreen = () => {
-    const insets = useSafeAreaInsets();
-    const [activeColumn, setActiveColumn] = useState<TaskStatus>('inProgress');
-    const [ready, setReady] = useState(false);
+    const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    const [groups, setGroups] = useState<Group[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [groupName, setGroupName] = useState<string>('');
-    const [taskMap, setTaskMap] = useState<Record<TaskStatus, AssignmentItem[]>>({
-        todo: [],
-        inProgress: [],
-        done: [],
-    });
 
-    const fetchTasks = useCallback(async (isRefresh = false) => {
+    const fetchGroups = useCallback(async () => {
         try {
-            if (!isRefresh) setLoading(true);
-            const res = await getMyAssignmentFeed();
-            setGroupName(res.group?.name || '');
-
-            const mapped: Record<TaskStatus, AssignmentItem[]> = {
-                todo: [],
-                inProgress: [],
-                done: [],
-            };
-
-            for (const task of res.assignments) {
-                mapped[normalizeStatus(task.status)].push(task);
-            }
-
-            setTaskMap(mapped);
+            setLoading(true);
+            const data = await getMyGroups();
+            setGroups(data);
         } catch (error: any) {
-            showError(error.response?.data?.message || 'Failed to load tasks');
+            showError(error?.response?.data?.message || 'Failed to load groups');
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     }, []);
 
-    /** Defer render until after navigation animation */
     useFocusEffect(
         useCallback(() => {
             const task = InteractionManager.runAfterInteractions(() => {
-                setReady(true);
-                fetchTasks();
+                fetchGroups();
             });
-            return () => {
-                task.cancel();
-            };
-        }, [fetchTasks]),
+            return () => task.cancel();
+        }, [fetchGroups]),
     );
 
-    const onRefresh = useCallback(() => {
+    const onRefresh = () => {
         setRefreshing(true);
-        fetchTasks(true);
-    }, [fetchTasks]);
+        fetchGroups();
+    };
 
-    const tasks = taskMap[activeColumn];
-
-    if (loading && !ready) {
+    if (loading) {
         return (
             <SafeAreaView className="flex-1 bg-[#101922] items-center justify-center">
-                <ActivityIndicator size="large" color="#7C3AED" />
+                <ActivityIndicator size="large" color="#2563EB" />
             </SafeAreaView>
         );
     }
@@ -187,82 +64,75 @@ const TasksScreen = () => {
         <SafeAreaView className="flex-1 bg-[#101922]" edges={['top']}>
             <StatusBar barStyle="light-content" backgroundColor="#101922" />
 
-            {/* ── Header ── */}
-            <View className="px-4 py-3">
-                <Text className="text-white text-2xl font-bold">My Tasks</Text>
-                <Text className="text-gray-500 text-sm mt-0.5">
-                    {taskMap.inProgress.length} in progress • {taskMap.todo.length} pending
+            <View className="px-4 pt-3 pb-2">
+                <Text className="text-white text-2xl font-black">Tasks</Text>
+                <Text className="text-gray-400 text-sm mt-1">
+                    Task CRUD is now managed inside each Group Detail.
                 </Text>
-                {!!groupName && (
-                    <Text className="text-[#A78BFA] text-xs mt-1">Group: {groupName}</Text>
-                )}
             </View>
 
-            {/* ── Column Tabs ── */}
-            <View className="px-4 mb-3">
-                <View className="flex-row bg-[#1A2332] rounded-xl p-1 gap-1">
-                    {COLUMNS.map((column) => {
-                        const isActive = activeColumn === column.key;
-                        return (
-                            <TouchableOpacity
-                                key={column.key}
-                                onPress={() => setActiveColumn(column.key)}
-                                className="flex-1 rounded-lg py-3 items-center flex-row justify-center gap-1.5"
-                                style={isActive ? { backgroundColor: column.color } : {}}
-                                activeOpacity={0.8}
-                            >
-                                <Feather
-                                    name={column.icon as any}
-                                    size={14}
-                                    color={isActive ? '#fff' : '#475569'}
-                                />
-                                <Text
-                                    className={`text-xs font-semibold ${isActive ? 'text-white' : 'text-gray-500'
-                                        }`}
-                                >
-                                    {column.title}
-                                </Text>
-                                <View
-                                    className={`px-1.5 py-0.5 rounded-md ${isActive ? 'bg-white/20' : 'bg-white/5'
-                                        }`}
-                                >
-                                    <Text
-                                        className={`text-[10px] font-bold ${isActive ? 'text-white' : 'text-gray-500'
-                                            }`}
-                                    >
-                                        {taskMap[column.key].length}
-                                    </Text>
-                                </View>
-                            </TouchableOpacity>
-                        );
-                    })}
+            <View className="mx-4 mt-2 mb-3 bg-[#1A2332] rounded-2xl p-4 border border-[#243447]">
+                <View className="flex-row items-start gap-2">
+                    <MaterialIcons name="tips-and-updates" size={18} color="#60A5FA" />
+                    <Text className="text-gray-300 text-sm flex-1">
+                        Open a group below, then use the Group Tasks section to create, edit, move status, and delete tasks.
+                    </Text>
                 </View>
             </View>
 
-            {/* ── Tasks List ── */}
             <FlatList
-                data={ready ? tasks : []}
-                keyExtractor={(item) => item.key}
-                renderItem={({ item }) => (
-                    <View className="px-4">
-                        <TaskCard task={item} isDone={activeColumn === 'done'} />
-                    </View>
-                )}
-                contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 20 }}
+                data={groups}
+                keyExtractor={(item) => item.id}
                 refreshControl={
                     <RefreshControl
                         refreshing={refreshing}
                         onRefresh={onRefresh}
-                        tintColor="#7C3AED"
-                        colors={['#7C3AED']}
+                        tintColor="#2563EB"
+                        colors={['#2563EB']}
                     />
                 }
+                renderItem={({ item }) => (
+                    <TouchableOpacity
+                        onPress={() => navigation.navigate('GroupDetail', { groupId: item.id })}
+                        activeOpacity={0.85}
+                        className="mx-4 mb-3 bg-[#1A2332] rounded-2xl p-4"
+                    >
+                        <View className="flex-row items-center justify-between">
+                            <View className="flex-1 pr-3">
+                                <Text className="text-white text-base font-bold" numberOfLines={1}>
+                                    {item.name}
+                                </Text>
+                                <Text className="text-gray-400 text-xs mt-1" numberOfLines={1}>
+                                    {item.project_name || 'No project title yet'}
+                                </Text>
+                                <View className="flex-row items-center gap-2 mt-2">
+                                    <View className="bg-[#243447] px-2 py-1 rounded-md">
+                                        <Text className="text-[#93C5FD] text-[10px] font-semibold">
+                                            {item.members_count} members
+                                        </Text>
+                                    </View>
+                                    {!!item.jira_project_key && (
+                                        <View className="bg-[#1D4ED8]/20 px-2 py-1 rounded-md">
+                                            <Text className="text-[#93C5FD] text-[10px] font-semibold">
+                                                {item.jira_project_key}
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                            </View>
+                            <Feather name="chevron-right" size={18} color="#64748B" />
+                        </View>
+                    </TouchableOpacity>
+                )}
                 ListEmptyComponent={
-                    <View className="items-center py-16">
-                        <MaterialIcons name="task" size={48} color="#475569" />
-                        <Text className="text-gray-500 mt-3">No tasks here</Text>
+                    <View className="items-center px-8 py-16">
+                        <MaterialIcons name="group-off" size={48} color="#475569" />
+                        <Text className="text-gray-400 text-center mt-3">
+                            You have not joined any group yet.
+                        </Text>
                     </View>
                 }
+                contentContainerStyle={{ paddingBottom: 100 }}
             />
         </SafeAreaView>
     );

@@ -24,6 +24,11 @@ import {
     createRepository,
     type GitHubRepo,
 } from '@/services/githubService';
+import {
+    getJiraProjects,
+    linkJiraProject,
+    type JiraProject,
+} from '@/services/jiraService';
 import { showSuccess, showError } from '@/utils/toast';
 import type { RootStackParamList } from '@/navigation/AppNavigator';
 
@@ -87,10 +92,55 @@ const FORM_FIELDS: FormField[] = [
         placeholder: 'e.g. ECOM',
         maxLength: 50,
         icon: 'trello',
+        isSelect: true,
     },
 ];
 
 type FormData = Record<string, string>;
+
+const parseGithubFullNameFromUrl = (url?: string): string | null => {
+    if (!url) return null;
+
+    const match = url.match(/github\.com\/([^/]+)\/([^/?#]+)/i);
+    if (!match) return null;
+
+    const owner = match[1];
+    const repo = match[2].replace(/\.git$/i, '');
+    return `${owner}/${repo}`;
+};
+
+const parseIntegrationError = (
+    error: any,
+    fallback: string,
+): { message: string; reconnectRequired: boolean } => {
+    const payload = error?.response?.data;
+    const rawMessage = payload?.message;
+    const providerMessage = payload?.details?.providerMessage;
+
+    const code = payload?.code;
+    const readableRawMessage = Array.isArray(rawMessage)
+        ? rawMessage.join(', ')
+        : typeof rawMessage === 'string'
+            ? rawMessage
+            : '';
+
+    // Prefer provider message for Jira errors because backend generic messages
+    // (e.g. "Failed to fetch Jira projects") hide the real Atlassian reason.
+    const message =
+        typeof providerMessage === 'string' && providerMessage.trim().length > 0
+            ? providerMessage
+            : readableRawMessage || fallback;
+
+    const reconnectByCode =
+        code === 'ACCOUNT_NOT_LINKED' ||
+        code === 'TOKEN_EXPIRED' ||
+        code === 'INSUFFICIENT_SCOPE';
+
+    return {
+        message,
+        reconnectRequired: Boolean(payload?.reconnectRequired) || reconnectByCode,
+    };
+};
 
 // ==================== Component ====================
 
@@ -111,9 +161,16 @@ const CreateGroupScreen = () => {
     const [repos, setRepos] = useState<GitHubRepo[]>([]);
     const [loadingRepos, setLoadingRepos] = useState(false);
     const [isRepoModalVisible, setRepoModalVisible] = useState(false);
+    const [isJiraModalVisible, setJiraModalVisible] = useState(false);
 
     // Selected repo metadata (for linking after group creation)
     const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null);
+    const [jiraProjects, setJiraProjects] = useState<JiraProject[]>([]);
+    const [loadingJiraProjects, setLoadingJiraProjects] = useState(false);
+    const [selectedJiraProject, setSelectedJiraProject] = useState<JiraProject | null>(null);
+    const [jiraDisplayFallback, setJiraDisplayFallback] = useState<string>('');
+    const [jiraProjectsError, setJiraProjectsError] = useState('');
+    const [jiraReconnectRequired, setJiraReconnectRequired] = useState(false);
 
     // Create new repo state
     const [showCreateRepo, setShowCreateRepo] = useState(false);
@@ -137,6 +194,7 @@ const CreateGroupScreen = () => {
                         github_repo_url: group.github_repo_url || '',
                         jira_project_key: group.jira_project_key || '',
                     });
+                    setJiraDisplayFallback(group.jira_project_key || '');
                 } catch (error: any) {
                     showError(error.response?.data?.message || 'Failed to load group');
                     navigation.goBack();
@@ -164,6 +222,65 @@ const CreateGroupScreen = () => {
         };
         fetchRepos();
     }, []);
+
+    const fetchJiraProjects = async () => {
+        try {
+            setLoadingJiraProjects(true);
+            setJiraProjectsError('');
+            setJiraReconnectRequired(false);
+            const projects = await getJiraProjects();
+            setJiraProjects(projects || []);
+        } catch (error: any) {
+            // User may not have linked Jira yet; keep picker empty but show reason.
+            const parsed = parseIntegrationError(
+                error,
+                'Unable to load Jira projects. Please link Jira account first.',
+            );
+            setJiraProjects([]);
+            setJiraProjectsError(parsed.message);
+            setJiraReconnectRequired(parsed.reconnectRequired);
+        } finally {
+            setLoadingJiraProjects(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchJiraProjects();
+    }, []);
+
+    useEffect(() => {
+        if (!isJiraModalVisible) return;
+        if (loadingJiraProjects) return;
+        if (jiraProjects.length > 0) return;
+
+        fetchJiraProjects();
+    }, [isJiraModalVisible]);
+
+    useEffect(() => {
+        if (!formData.github_repo_url || repos.length === 0 || selectedRepo) return;
+
+        const normalized = formData.github_repo_url.trim().toLowerCase();
+        const matched = repos.find((repo) => repo.html_url?.trim().toLowerCase() === normalized);
+        if (matched) {
+            setSelectedRepo(matched);
+        }
+    }, [formData.github_repo_url, repos, selectedRepo]);
+
+    useEffect(() => {
+        if (!formData.jira_project_key || jiraProjects.length === 0) return;
+        if (selectedJiraProject?.key === formData.jira_project_key) return;
+
+        const normalized = formData.jira_project_key.trim().toLowerCase();
+        const matched = jiraProjects.find(
+            (project) =>
+                project.key.trim().toLowerCase() === normalized ||
+                project.id.trim().toLowerCase() === normalized,
+        );
+        if (matched) {
+            setSelectedJiraProject(matched);
+            setJiraDisplayFallback('');
+        }
+    }, [formData.jira_project_key, jiraProjects, selectedJiraProject]);
 
     // ── Create New Repository ───────────────
 
@@ -220,6 +337,20 @@ const CreateGroupScreen = () => {
         setRepoModalVisible(false);
     };
 
+    const handleSelectJiraProject = (project: JiraProject | null) => {
+        if (!project) {
+            setSelectedJiraProject(null);
+            updateField('jira_project_key', '');
+            setJiraDisplayFallback('');
+        } else {
+            setSelectedJiraProject(project);
+            updateField('jira_project_key', project.key);
+            setJiraDisplayFallback('');
+        }
+
+        setJiraModalVisible(false);
+    };
+
     // ── Submit ──────────────────────────────────────
 
     const handleSubmit = async () => {
@@ -241,6 +372,26 @@ const CreateGroupScreen = () => {
 
             if (isEditMode && editGroupId) {
                 await updateGroup(editGroupId, payload);
+                const repoFullName = selectedRepo?.full_name || parseGithubFullNameFromUrl(payload.github_repo_url);
+
+                if (selectedJiraProject && repoFullName) {
+                    try {
+                        await linkJiraProject({
+                            github_repo_full_name: repoFullName,
+                            jira_project_id: selectedJiraProject.id,
+                        });
+                    } catch (jiraError: any) {
+                        showError(
+                            jiraError?.response?.data?.message ||
+                                'Group updated, but failed to link Jira project',
+                        );
+                    }
+                } else if (selectedJiraProject && !repoFullName) {
+                    showError(
+                        'Group updated, but Jira was not linked. Please select a GitHub repository first.',
+                    );
+                }
+
                 showSuccess('Group updated successfully');
             } else {
                 const group = await createGroup(payload as any);
@@ -257,6 +408,25 @@ const CreateGroupScreen = () => {
                     } catch (linkError: any) {
                         console.warn('Failed to link repo to group:', linkError.message);
                     }
+                }
+
+                const repoFullName = selectedRepo?.full_name || parseGithubFullNameFromUrl(payload.github_repo_url);
+                if (selectedJiraProject && repoFullName) {
+                    try {
+                        await linkJiraProject({
+                            github_repo_full_name: repoFullName,
+                            jira_project_id: selectedJiraProject.id,
+                        });
+                    } catch (jiraError: any) {
+                        showError(
+                            jiraError?.response?.data?.message ||
+                                'Group created, but failed to link Jira project',
+                        );
+                    }
+                } else if (selectedJiraProject && !repoFullName) {
+                    showError(
+                        'Group created, but Jira was not linked. Please select a GitHub repository first.',
+                    );
                 }
 
                 showSuccess('Group created successfully');
@@ -316,6 +486,7 @@ const CreateGroupScreen = () => {
                     {FORM_FIELDS.map((field) => {
                         const isFocused = focusedField === field.key;
                         const isGitHub = field.isSelect && field.key === 'github_repo_url';
+                        const isJira = field.isSelect && field.key === 'jira_project_key';
 
                         return (
                             <View key={field.key} className="mb-4">
@@ -353,6 +524,32 @@ const CreateGroupScreen = () => {
                                             >
                                                 {selectedRepo
                                                     ? selectedRepo.full_name
+                                                    : parseGithubFullNameFromUrl(formData.github_repo_url)
+                                                        ? parseGithubFullNameFromUrl(formData.github_repo_url)!
+                                                    : field.placeholder}
+                                            </Text>
+                                            <Feather name="chevron-down" size={16} color="#64748B" />
+                                        </View>
+                                    </TouchableOpacity>
+                                ) : isJira ? (
+                                    // Jira project selector button
+                                    <TouchableOpacity
+                                        onPress={() => setJiraModalVisible(true)}
+                                        className={`bg-[#1A2332] rounded-xl px-4 h-12 border justify-center ${isFocused ? 'border-[#7C3AED]' : 'border-white/10'
+                                            }`}
+                                    >
+                                        <View className="flex-row items-center justify-between">
+                                            <Text
+                                                className={`text-sm ${formData[field.key]
+                                                    ? 'text-white'
+                                                    : 'text-[#475569]'
+                                                    }`}
+                                                numberOfLines={1}
+                                            >
+                                                {selectedJiraProject
+                                                    ? `${selectedJiraProject.key} - ${selectedJiraProject.name}`
+                                                    : jiraDisplayFallback
+                                                        ? jiraDisplayFallback
                                                     : field.placeholder}
                                             </Text>
                                             <Feather name="chevron-down" size={16} color="#64748B" />
@@ -566,6 +763,102 @@ const CreateGroupScreen = () => {
                                         }}
                                     />
                                 )}
+                            </>
+                        )}
+                    </View>
+                </View>
+            </Modal>
+
+            {/* ═══════ Jira Project Selection Modal ═══════ */}
+            <Modal
+                visible={isJiraModalVisible}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setJiraModalVisible(false)}
+            >
+                <View className="flex-1 bg-black/50 justify-end">
+                    <View className="bg-[#101922] rounded-t-3xl border-t border-white/10" style={{ maxHeight: '80%' }}>
+                        <View className="flex-row justify-between items-center p-4 border-b border-white/10">
+                            <Text className="text-white text-lg font-bold">Select Jira Project</Text>
+                            <TouchableOpacity onPress={() => setJiraModalVisible(false)} className="p-2">
+                                <Feather name="x" size={24} color="#fff" />
+                            </TouchableOpacity>
+                        </View>
+
+                        {loadingJiraProjects ? (
+                            <View className="py-10 items-center justify-center">
+                                <ActivityIndicator size="large" color="#7C3AED" />
+                            </View>
+                        ) : (
+                            <>
+                                {!!jiraProjectsError && (
+                                    <View className="mx-4 mt-4 bg-[#7C2D12]/25 border border-[#EA580C]/40 rounded-xl p-3">
+                                        <Text className="text-orange-200 text-xs">{jiraProjectsError}</Text>
+                                        <View className="mt-2 flex-row items-center gap-2">
+                                            <TouchableOpacity
+                                                onPress={fetchJiraProjects}
+                                                className="self-start bg-[#EA580C]/20 px-3 py-1.5 rounded-lg"
+                                            >
+                                                <Text className="text-orange-200 text-xs font-semibold">Retry</Text>
+                                            </TouchableOpacity>
+
+                                            {jiraReconnectRequired && (
+                                                <TouchableOpacity
+                                                    onPress={() => {
+                                                        setJiraModalVisible(false);
+                                                        navigation.navigate('LinkedAccounts');
+                                                    }}
+                                                    className="self-start bg-[#1D4ED8]/30 px-3 py-1.5 rounded-lg"
+                                                >
+                                                    <Text className="text-sky-200 text-xs font-semibold">Reconnect Jira</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+                                    </View>
+                                )}
+
+                                <FlatList
+                                    data={[null, ...jiraProjects]}
+                                    keyExtractor={(item, index) => (item ? item.id : `none-${index}`)}
+                                    contentContainerStyle={{ padding: 16 }}
+                                    showsVerticalScrollIndicator={false}
+                                    ListEmptyComponent={
+                                        <View className="py-10 items-center">
+                                            <Text className="text-gray-500 text-sm text-center">
+                                                No Jira projects found. Link Jira account first.
+                                            </Text>
+                                        </View>
+                                    }
+                                    renderItem={({ item }) => {
+                                        const isSelected = item
+                                            ? selectedJiraProject?.id === item.id
+                                            : !selectedJiraProject;
+
+                                        return (
+                                            <TouchableOpacity
+                                                onPress={() => handleSelectJiraProject(item)}
+                                                className={`py-4 border-b border-white/5 flex-row items-center justify-between ${isSelected ? 'opacity-100' : 'opacity-70'
+                                                    }`}
+                                            >
+                                                <View className="flex-1 mr-3">
+                                                    {item ? (
+                                                        <>
+                                                            <Text className="text-white text-base font-semibold">
+                                                                {item.key}
+                                                            </Text>
+                                                            <Text className="text-gray-400 text-xs mt-0.5" numberOfLines={1}>
+                                                                {item.name}
+                                                            </Text>
+                                                        </>
+                                                    ) : (
+                                                        <Text className="text-gray-400 text-base italic">None</Text>
+                                                    )}
+                                                </View>
+                                                {isSelected && <Feather name="check" size={20} color="#7C3AED" />}
+                                            </TouchableOpacity>
+                                        );
+                                    }}
+                                />
                             </>
                         )}
                     </View>
