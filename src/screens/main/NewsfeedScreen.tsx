@@ -10,7 +10,6 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@/components/icons';
 import { MaterialIcons } from '@/components/icons';
 import { useFocusEffect } from '@react-navigation/native';
 import {

@@ -198,6 +198,8 @@ const ClassesScreen = () => {
             });
             return () => {
                 isMounted.current = false;
+                // Ensure modal overlay is closed when leaving this tab.
+                setJoinModalVisible(false);
                 task.cancel();
             };
         }, [fetchData]),

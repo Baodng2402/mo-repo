@@ -15,6 +15,7 @@ import AddMemberScreen from '../screens/main/AddMemberScreen';
 import EvaluationScreen from '../screens/main/EvaluationScreen';
 import DocumentSubmissionsScreen from '../screens/main/DocumentSubmissionsScreen';
 import ReportsScreen from '../screens/main/ReportsScreen';
+import TopicLabScreen from '../screens/main/TopicLabScreen';
 import { getProfile } from '../services/authService';
 import { useUserStore } from '../utils/stores/userStore';
 
@@ -34,6 +35,7 @@ export type RootStackParamList = {
     Evaluation: { groupId: string };
     Documents: { groupId: string };
     Reports: { groupId: string };
+    TopicLab: { groupId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -135,6 +137,7 @@ export default function AppNavigator() {
             <Stack.Screen name="Evaluation" component={EvaluationScreen} />
             <Stack.Screen name="Documents" component={DocumentSubmissionsScreen} />
             <Stack.Screen name="Reports" component={ReportsScreen} />
+            <Stack.Screen name="TopicLab" component={TopicLabScreen} />
         </Stack.Navigator>
     );
 }

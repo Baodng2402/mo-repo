@@ -107,6 +107,7 @@ const featherMap = {
   'more-vertical': MoreVertical,
   plus: Plus,
   'plus-circle': PlusCircle,
+  'refresh-cw': RefreshCw,
   save: Save,
   settings: Settings,
   'share-2': Share2,

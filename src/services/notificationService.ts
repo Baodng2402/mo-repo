@@ -15,8 +15,17 @@ export interface AppNotification {
  * GET /api/notifications
  */
 export const getNotifications = async (): Promise<AppNotification[]> => {
-  const response = await axiosClient.get<AppNotification[]>(ENDPOINTS.NOTIFICATIONS.LIST);
-  return response.data;
+  try {
+    const response = await axiosClient.get<AppNotification[]>(ENDPOINTS.NOTIFICATIONS.LIST, {
+      expectedErrorStatuses: [404],
+    } as any);
+    return response.data;
+  } catch (error: any) {
+    if (error?.response?.status === 404) {
+      return [];
+    }
+    throw error;
+  }
 };
 
 /**

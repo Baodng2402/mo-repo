@@ -16,14 +16,26 @@ import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '@/navigation/AppNavigator';
 import {
     generateSrsReport,
-    getAssignmentReport,
     getCommitReport,
-    type AssignmentReport,
     type CommitReport,
 } from '@/services/reportService';
 import { showError, showSuccess } from '@/utils/toast';
 
-type ReportMode = 'none' | 'srs' | 'assignment' | 'commit';
+type ReportMode = 'none' | 'srs'  | 'commit';
+
+const getStatusChipClass = (status: string) => {
+    const normalized = status.toUpperCase();
+
+    if (normalized.includes('DONE')) {
+        return 'bg-green-500/15 text-green-400';
+    }
+
+    if (normalized.includes('PROGRESS') || normalized.includes('IN_')) {
+        return 'bg-blue-500/15 text-blue-400';
+    }
+
+    return 'bg-slate-500/15 text-slate-400';
+};
 
 const ReportsScreen = () => {
     const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -33,7 +45,6 @@ const ReportsScreen = () => {
     const [loading, setLoading] = useState(false);
     const [mode, setMode] = useState<ReportMode>('none');
     const [srs, setSrs] = useState('');
-    const [assignment, setAssignment] = useState<AssignmentReport | null>(null);
     const [commit, setCommit] = useState<CommitReport | null>(null);
 
     const runSrs = useCallback(async () => {
@@ -45,19 +56,6 @@ const ReportsScreen = () => {
             showSuccess('SRS generated');
         } catch (error: any) {
             showError(error.response?.data?.message || 'Failed to generate SRS');
-        } finally {
-            setLoading(false);
-        }
-    }, [groupId]);
-
-    const runAssignment = useCallback(async () => {
-        try {
-            setLoading(true);
-            setMode('assignment');
-            const res = await getAssignmentReport(groupId);
-            setAssignment(res);
-        } catch (error: any) {
-            showError(error.response?.data?.message || 'Failed to load assignment report');
         } finally {
             setLoading(false);
         }
@@ -103,13 +101,6 @@ const ReportsScreen = () => {
                         <Text className="text-white text-xs font-semibold">Generate SRS</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                        onPress={runAssignment}
-                        className="flex-1 bg-[#2563EB] rounded-xl py-3 items-center"
-                        activeOpacity={0.8}
-                    >
-                        <Text className="text-white text-xs font-semibold">Assignments</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
                         onPress={runCommit}
                         className="flex-1 bg-[#16A34A] rounded-xl py-3 items-center"
                         activeOpacity={0.8}
@@ -127,7 +118,7 @@ const ReportsScreen = () => {
                 {!loading && mode === 'none' ? (
                     <View className="bg-[#1A2332] rounded-2xl p-5 items-center">
                         <Text className="text-gray-500 text-center">
-                            Run a report to view generated data.
+                            Choose a report above to load your group insights.
                         </Text>
                     </View>
                 ) : null}
@@ -138,33 +129,35 @@ const ReportsScreen = () => {
                         <Text className="text-gray-300 text-xs leading-5">{srs}</Text>
                     </View>
                 ) : null}
-
-                {!loading && mode === 'assignment' && assignment ? (
-                    <View className="bg-[#1A2332] rounded-2xl p-4">
-                        <Text className="text-white font-semibold mb-1">{assignment.groupName}</Text>
-                        <Text className="text-gray-500 text-xs mb-3">Total tasks: {assignment.totalTasks}</Text>
-                        {assignment.assignments.map((item) => (
-                            <View key={item.key} className="py-2 border-b border-white/5">
-                                <Text className="text-white text-sm">{item.summary}</Text>
-                                <Text className="text-gray-500 text-xs mt-1">{item.key} • {item.status} • {item.assignee}</Text>
-                            </View>
-                        ))}
-                    </View>
-                ) : null}
-
                 {!loading && mode === 'commit' && commit ? (
                     <View className="bg-[#1A2332] rounded-2xl p-4">
                         <Text className="text-white font-semibold mb-3">{commit.groupName}</Text>
-                        {commit.repositories.map((repo) => (
-                            <View key={repo.repository} className="mb-4 pb-3 border-b border-white/5">
-                                <Text className="text-[#A78BFA] text-sm font-semibold mb-2">{repo.repository}</Text>
-                                {repo.contributors.map((c) => (
-                                    <Text key={`${repo.repository}-${c.author}`} className="text-gray-300 text-xs mb-1">
-                                        {c.author}: {c.commits} commits, +{c.lines_added}/-{c.lines_deleted}
-                                    </Text>
-                                ))}
+
+                        {commit.repositories.length === 0 ? (
+                            <View className="bg-[#243447] rounded-xl p-3">
+                                <Text className="text-gray-400 text-xs text-center">
+                                    No linked repositories with commit data yet.
+                                </Text>
                             </View>
-                        ))}
+                        ) : (
+                            commit.repositories.map((repo, index) => (
+                                <View
+                                    key={repo.repository}
+                                    className={`mb-4 pb-3 ${index < commit.repositories.length - 1 ? 'border-b border-white/5' : ''}`}
+                                >
+                                    <Text className="text-[#A78BFA] text-sm font-semibold mb-2">{repo.repository}</Text>
+                                    {repo.contributors.length === 0 ? (
+                                        <Text className="text-gray-500 text-xs">No contributors found.</Text>
+                                    ) : (
+                                        repo.contributors.map((c) => (
+                                            <Text key={`${repo.repository}-${c.author}`} className="text-gray-300 text-xs mb-1">
+                                                {c.author}: {c.commits} commits, +{c.lines_added}/-{c.lines_deleted}
+                                            </Text>
+                                        ))
+                                    )}
+                                </View>
+                            ))
+                        )}
                     </View>
                 ) : null}
             </ScrollView>

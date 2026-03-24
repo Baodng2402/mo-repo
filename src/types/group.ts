@@ -4,6 +4,13 @@ export type GroupStatus = 'ACTIVE' | 'ARCHIVED' | 'COMPLETED';
 
 export type MembershipRole = 'MEMBER' | 'LEADER' | 'MENTOR';
 
+export interface GroupTopic {
+  id: string;
+  name: string;
+  description?: string;
+  is_taken?: boolean;
+}
+
 // ==================== Entities ====================
 
 /** A member within a group, includes user info and role */
@@ -21,6 +28,8 @@ export interface Group {
   id: string;
   name: string;
   class_id: string;
+  topic_id?: string;
+  topic?: GroupTopic | null;
   project_name?: string;
   description?: string;
   semester?: string;
@@ -66,6 +75,7 @@ export interface UpdateGroupPayload {
   project_name?: string;
   description?: string;
   semester?: string;
+  topic_id?: string;
   github_repo_url?: string;
   jira_project_key?: string;
   status?: GroupStatus;

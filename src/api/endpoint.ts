@@ -11,6 +11,8 @@ const ENDPOINTS = {
     PROFILE: '/api/auth/me',
     LINK_GITHUB: '/api/auth/github',
     LINK_GITHUB_CALLBACK: '/api/auth/github/callback',
+    LINK_JIRA: '/api/auth/jira',
+    LINK_JIRA_CALLBACK: '/api/auth/jira/callback',
     LINKED_ACCOUNTS: '/api/auth/linked-accounts',
     UNLINK: (provider: string) => `/api/auth/unlink/${provider}`,
   },
@@ -46,9 +48,23 @@ const ENDPOINTS = {
     LINK_PROJECT: '/api/jira/projects/link',
   },
 
+  TOPICS: {
+    LIST: '/api/topics',
+    AVAILABLE: '/api/topics/available',
+    AI_GENERATE: '/api/topics/ai/generate',
+    AI_CREATE: '/api/topics/ai/create',
+  },
+
+  TASKS: {
+    LIST: '/api/tasks',
+    DETAIL: (id: string) => `/api/tasks/${id}`,
+    CREATE: '/api/tasks',
+    UPDATE: (id: string) => `/api/tasks/${id}`,
+    DELETE: (id: string) => `/api/tasks/${id}`,
+  },
+
   REPORTS: {
     SRS: (groupId: string) => `/api/reports/srs/${groupId}`,
-    ASSIGNMENTS: (groupId: string) => `/api/reports/assignments/${groupId}`,
     COMMITS: (groupId: string) => `/api/reports/commits/${groupId}`,
   },
 

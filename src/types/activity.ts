@@ -1,7 +1,7 @@
 // ==================== GitHub Activity Types ====================
 
 /** Status of a Jira task */
-export type JiraTaskStatus = 'TO_DO' | 'IN_PROGRESS' | 'DONE';
+export type JiraTaskStatus = 'TO_DO' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED';
 
 /** A single GitHub commit */
 export interface CommitInfo {
@@ -51,6 +51,7 @@ export const JIRA_STATUS_CONFIG: Record<
   TO_DO: { label: 'To Do', color: '#94A3B8', bg: '#94A3B8' },
   IN_PROGRESS: { label: 'In Progress', color: '#3B82F6', bg: '#3B82F6' },
   DONE: { label: 'Done', color: '#22C55E', bg: '#22C55E' },
+  BLOCKED: { label: 'Blocked', color: '#EF4444', bg: '#EF4444' },
 };
 
 /** Jira priority display config */
