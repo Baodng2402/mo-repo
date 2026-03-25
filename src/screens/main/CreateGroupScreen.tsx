@@ -74,9 +74,10 @@ const FORM_FIELDS: FormField[] = [
     {
         key: 'semester',
         label: 'Semester',
-        placeholder: 'e.g. HK2-2025',
+        placeholder: 'Select semester',
         maxLength: 20,
         icon: 'calendar',
+        isSelect: true,
     },
     {
         key: 'github_repo_url',
@@ -97,6 +98,19 @@ const FORM_FIELDS: FormField[] = [
 ];
 
 type FormData = Record<string, string>;
+
+// Generate semester options: SP / FA for current year ±2
+const generateSemesterOptions = (): string[] => {
+    const year = new Date().getFullYear();
+    const options: string[] = [];
+    for (let y = year - 1; y <= year + 2; y++) {
+        const short = String(y).slice(-2);
+        options.push(`SP${short}`, `SU${short}`, `FA${short}`);
+    }
+    return options;
+};
+
+const SEMESTER_OPTIONS = generateSemesterOptions();
 
 const parseGithubFullNameFromUrl = (url?: string): string | null => {
     if (!url) return null;
@@ -156,6 +170,9 @@ const CreateGroupScreen = () => {
     const [submitting, setSubmitting] = useState(false);
     const [loadingGroup, setLoadingGroup] = useState(false);
     const [focusedField, setFocusedField] = useState<string | null>(null);
+
+    // Semester picker state
+    const [isSemesterModalVisible, setSemesterModalVisible] = useState(false);
 
     // GitHub repos state
     const [repos, setRepos] = useState<GitHubRepo[]>([]);
@@ -487,6 +504,7 @@ const CreateGroupScreen = () => {
                         const isFocused = focusedField === field.key;
                         const isGitHub = field.isSelect && field.key === 'github_repo_url';
                         const isJira = field.isSelect && field.key === 'jira_project_key';
+                        const isSemester = field.isSelect && field.key === 'semester';
 
                         return (
                             <View key={field.key} className="mb-4">
@@ -507,7 +525,22 @@ const CreateGroupScreen = () => {
                                     </Text>
                                 </View>
 
-                                {isGitHub ? (
+                                {isSemester ? (
+                                    // Semester selector button
+                                    <TouchableOpacity
+                                        onPress={() => setSemesterModalVisible(true)}
+                                        className={`bg-[#1A2332] rounded-xl px-4 h-12 border justify-center ${isFocused ? 'border-[#7C3AED]' : 'border-white/10'}`}
+                                    >
+                                        <View className="flex-row items-center justify-between">
+                                            <Text
+                                                className={`text-sm ${formData[field.key] ? 'text-white' : 'text-[#475569]'}`}
+                                            >
+                                                {formData[field.key] || field.placeholder}
+                                            </Text>
+                                            <Feather name="chevron-down" size={16} color="#64748B" />
+                                        </View>
+                                    </TouchableOpacity>
+                                ) : isGitHub ? (
                                     // GitHub repo selector button
                                     <TouchableOpacity
                                         onPress={() => setRepoModalVisible(true)}
@@ -611,6 +644,57 @@ const CreateGroupScreen = () => {
                     </TouchableOpacity>
                 </View>
             </KeyboardAvoidingView>
+
+            {/* ═══════ Semester Selection Modal ═══════ */}
+            <Modal
+                visible={isSemesterModalVisible}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setSemesterModalVisible(false)}
+            >
+                <View className="flex-1 bg-black/50 justify-end">
+                    <View className="bg-[#101922] rounded-t-3xl border-t border-white/10" style={{ maxHeight: '70%' }}>
+                        <View className="flex-row justify-between items-center p-4 border-b border-white/10">
+                            <Text className="text-white text-lg font-bold">Select Semester</Text>
+                            <TouchableOpacity
+                                onPress={() => setSemesterModalVisible(false)}
+                                className="p-2"
+                            >
+                                <Feather name="x" size={24} color="#fff" />
+                            </TouchableOpacity>
+                        </View>
+                        <FlatList
+                            data={['', ...SEMESTER_OPTIONS]}
+                            keyExtractor={(item, index) => item || `none-${index}`}
+                            contentContainerStyle={{ padding: 16 }}
+                            showsVerticalScrollIndicator={false}
+                            renderItem={({ item }) => {
+                                const isSelected = item
+                                    ? formData.semester === item
+                                    : !formData.semester;
+                                return (
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            updateField('semester', item);
+                                            setSemesterModalVisible(false);
+                                        }}
+                                        className={`py-4 border-b border-white/5 flex-row items-center justify-between ${isSelected ? 'opacity-100' : 'opacity-70'}`}
+                                    >
+                                        <Text
+                                            className={`text-base ${item ? 'text-white' : 'text-gray-400 italic'}`}
+                                        >
+                                            {item || 'None'}
+                                        </Text>
+                                        {isSelected && (
+                                            <Feather name="check" size={20} color="#7C3AED" />
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            }}
+                        />
+                    </View>
+                </View>
+            </Modal>
 
             {/* ═══════ GitHub Repo Selection Modal ═══════ */}
             <Modal

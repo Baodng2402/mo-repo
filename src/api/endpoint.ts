@@ -55,6 +55,15 @@ const ENDPOINTS = {
     AI_CREATE: '/api/topics/ai/create',
   },
 
+  EVALUATIONS: {
+    LIST: '/api/evaluations',
+    CREATE: '/api/evaluations',
+    DETAIL: (id: string) => `/api/evaluations/${id}`,
+    UPDATE: (id: string) => `/api/evaluations/${id}`,
+    DELETE: (id: string) => `/api/evaluations/${id}`,
+    MY_CONTRIBUTION: (id: string) => `/api/evaluations/${id}/my-contribution`,
+  },
+
   TASKS: {
     LIST: '/api/tasks',
     DETAIL: (id: string) => `/api/tasks/${id}`,
@@ -71,6 +80,12 @@ const ENDPOINTS = {
   DOCUMENTS: {
     GROUP_SUBMISSIONS: (groupId: string) => `/api/documents/group/${groupId}`,
     SUBMIT_FOR_GROUP: (groupId: string) => `/api/documents/group/${groupId}`,
+  },
+
+  SEMESTERS: {
+    CURRENT_WEEK: '/api/semesters/current-week',
+    STUDENT_WARNINGS: '/api/semesters/current/compliance/student-warning',
+    STUDENT_REVIEW_STATUS: '/api/semesters/current/reviews/student-status',
   },
 
   NOTIFICATIONS: {

@@ -1190,6 +1190,18 @@ const GroupDetailScreen = () => {
                         </TouchableOpacity>
                     )}
 
+                    {/* Semester Status — all members */}
+                    {currentMember && (
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('SemesterStatus', { groupId: group.id })}
+                            activeOpacity={0.8}
+                            className="flex-row items-center justify-center gap-2 bg-[#1A2332] border border-white/10 py-3.5 rounded-xl"
+                        >
+                            <MaterialIcons name="school" size={18} color="#7C3AED" />
+                            <Text className="text-white font-semibold">Semester Status</Text>
+                        </TouchableOpacity>
+                    )}
+
                     {/* Leave — any member (including leader) can leave */}
                     {currentMember && (
                         <TouchableOpacity
