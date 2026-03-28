@@ -1,6 +1,7 @@
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '@env';
+import { clearAccessToken, getAccessToken } from '@/utils/auth/session';
+import { debugLog } from '@/utils/debug/log';
 
 // ==================== Create Axios Instance ====================
 
@@ -20,10 +21,21 @@ const axiosClient = axios.create({
  */
 axiosClient.interceptors.request.use(
   async (config) => {
-    const token = await AsyncStorage.getItem('access_token');
+    const token = await getAccessToken();
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    if (config?.url?.includes('/auth/me')) {
+      debugLog('[AUTH DEBUG] Request /auth/me', {
+        hasToken: !!token,
+        tokenPreview: token ? `${token.slice(0, 10)}...` : null,
+        baseURL: config.baseURL,
+        url: config.url,
+      });
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -54,13 +66,26 @@ axiosClient.interceptors.response.use(
         console.log('Status:', error.response.status);
       }
 
+      if (config?.url?.includes('/auth/me')) {
+        debugLog('[AUTH DEBUG] /auth/me failed', {
+          status: error.response.status,
+          data: error.response.data,
+        });
+      }
+
       // Token expired or invalid → auto logout
       if (error.response.status === 401) {
         const provider = error.response?.data?.provider;
         const isIntegration401 = provider === 'JIRA' || provider === 'GITHUB';
 
         if (!isIntegration401) {
-          await AsyncStorage.removeItem('access_token');
+          debugLog('[AUTH DEBUG] Removing access_token due to 401', {
+            url: config?.url,
+            method: config?.method,
+            status: error.response?.status,
+            response: error.response?.data,
+          });
+          await clearAccessToken();
           // The app will redirect to SignIn on next navigation or re-render
         }
       }

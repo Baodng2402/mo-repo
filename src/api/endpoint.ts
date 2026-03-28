@@ -83,6 +83,7 @@ const ENDPOINTS = {
   },
 
   SEMESTERS: {
+    CURRENT: '/api/semesters/current',
     CURRENT_WEEK: '/api/semesters/current-week',
     STUDENT_WARNINGS: '/api/semesters/current/compliance/student-warning',
     STUDENT_REVIEW_STATUS: '/api/semesters/current/reviews/student-status',
@@ -91,6 +92,15 @@ const ENDPOINTS = {
   NOTIFICATIONS: {
     LIST: '/api/notifications',
     MARK_READ: (id: string) => `/api/notifications/${id}/read`,
+  },
+
+  CHAT: {
+    LIST_CONVERSATIONS: '/api/chat/conversations',
+    CREATE_CONVERSATION: '/api/chat/conversations',
+    CONVERSATION_DETAIL: (conversationId: string) => `/api/chat/conversations/${conversationId}`,
+    LIST_MESSAGES: (conversationId: string) => `/api/chat/conversations/${conversationId}/messages`,
+    SEND_MESSAGE: (conversationId: string) => `/api/chat/conversations/${conversationId}/messages`,
+    MARK_READ: (conversationId: string) => `/api/chat/conversations/${conversationId}/read`,
   },
 
   PROJECT: {

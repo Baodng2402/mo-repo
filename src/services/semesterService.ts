@@ -102,6 +102,11 @@ export interface StudentReviewStatusResponse {
 
 // ── API calls ──────────────────────────────────────────────────────────────────
 
+export const getCurrentSemester = async (): Promise<SerializedSemester> => {
+  const res = await axiosClient.get<SerializedSemester>(ENDPOINTS.SEMESTERS.CURRENT);
+  return res.data;
+};
+
 export const getCurrentWeek = async (): Promise<CurrentWeekResponse> => {
   const res = await axiosClient.get<CurrentWeekResponse>(ENDPOINTS.SEMESTERS.CURRENT_WEEK);
   return res.data;
@@ -114,7 +119,7 @@ export const getStudentWarnings = async (): Promise<StudentWarningResponse> => {
 
 export const getStudentReviewStatus = async (): Promise<StudentReviewStatusResponse> => {
   const res = await axiosClient.get<StudentReviewStatusResponse>(
-    ENDPOINTS.SEMESTERS.STUDENT_REVIEW_STATUS,
+    ENDPOINTS.SEMESTERS.STUDENT_REVIEW_STATUS
   );
   return res.data;
 };

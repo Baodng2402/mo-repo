@@ -87,7 +87,7 @@ const TopicLabScreen = () => {
 
   const selectedTopic = useMemo(
     () => availableTopics.find((topic) => topic.id === selectedTopicId) || null,
-    [availableTopics, selectedTopicId],
+    [availableTopics, selectedTopicId]
   );
 
   const handleGenerateDraft = async () => {
@@ -103,10 +103,7 @@ const TopicLabScreen = () => {
           ? `Please provide a clearly distinct topic variation (attempt ${attempt + 1}).`
           : '';
 
-      const refinedTeamContext = [baseTeamContext, attemptHint]
-        .filter(Boolean)
-        .join(' ')
-        .trim();
+      const refinedTeamContext = [baseTeamContext, attemptHint].filter(Boolean).join(' ').trim();
 
       return {
         mode,
@@ -197,76 +194,78 @@ const TopicLabScreen = () => {
     <SafeAreaView className="flex-1 bg-[#101922]" edges={['top']}>
       <StatusBar barStyle="light-content" backgroundColor="#101922" />
 
-      <View className="flex-row items-center px-4 py-3 border-b border-white/10">
+      <View className="flex-row items-center border-b border-white/10 px-4 py-3">
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          className="w-10 h-10 items-center justify-center rounded-xl bg-[#1A2332]"
-        >
+          className="h-10 w-10 items-center justify-center rounded-xl bg-[#1A2332]">
           <Feather name="arrow-left" size={20} color="#fff" />
         </TouchableOpacity>
         <View className="ml-3 flex-1">
-          <Text className="text-white text-lg font-bold">Topic Lab</Text>
-          <Text className="text-gray-500 text-xs mt-0.5">Generate, refine, and apply topic for this group</Text>
+          <Text className="text-lg font-bold text-white">Topic Lab</Text>
+          <Text className="mt-0.5 text-xs text-gray-500">
+            Generate, refine, and apply topic for this group
+          </Text>
         </View>
       </View>
 
       <ScrollView
         className="flex-1 px-4"
         contentContainerStyle={{ paddingTop: 16, paddingBottom: 36 }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View className="bg-[#1A2332] rounded-2xl p-4 mb-4">
-          <Text className="text-white text-base font-semibold mb-3">AI Topic Draft</Text>
+        showsVerticalScrollIndicator={false}>
+        <View className="mb-4 rounded-2xl bg-[#1A2332] p-4">
+          <Text className="mb-3 text-base font-semibold text-white">AI Topic Draft</Text>
 
-          <View className="flex-row bg-[#243447] rounded-xl p-1 mb-3">
+          <View className="mb-3 flex-row rounded-xl bg-[#243447] p-1">
             <TouchableOpacity
               onPress={() => setMode('AUTO')}
-              className={`flex-1 py-2.5 rounded-lg items-center ${mode === 'AUTO' ? 'bg-[#7C3AED]' : ''}`}
-              activeOpacity={0.8}
-            >
-              <Text className={`text-xs font-semibold ${mode === 'AUTO' ? 'text-white' : 'text-gray-400'}`}>
+              className={`flex-1 items-center rounded-lg py-2.5 ${mode === 'AUTO' ? 'bg-[#7C3AED]' : ''}`}
+              activeOpacity={0.8}>
+              <Text
+                className={`text-xs font-semibold ${mode === 'AUTO' ? 'text-white' : 'text-gray-400'}`}>
                 Auto Generate
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => setMode('REFINE')}
-              className={`flex-1 py-2.5 rounded-lg items-center ${mode === 'REFINE' ? 'bg-[#7C3AED]' : ''}`}
-              activeOpacity={0.8}
-            >
-              <Text className={`text-xs font-semibold ${mode === 'REFINE' ? 'text-white' : 'text-gray-400'}`}>
+              className={`flex-1 items-center rounded-lg py-2.5 ${mode === 'REFINE' ? 'bg-[#7C3AED]' : ''}`}
+              activeOpacity={0.8}>
+              <Text
+                className={`text-xs font-semibold ${mode === 'REFINE' ? 'text-white' : 'text-gray-400'}`}>
                 Refine Seed
               </Text>
             </TouchableOpacity>
           </View>
 
-          <Text className="text-gray-400 text-xs mb-1">Seed Topic {mode === 'REFINE' ? '*' : '(optional)'}</Text>
+          <Text className="mb-1 text-xs text-gray-400">
+            Seed Topic {mode === 'REFINE' ? '*' : '(optional)'}
+          </Text>
           <TextInput
             value={seedName}
             onChangeText={setSeedName}
             placeholder="e.g. Smart Lab Resource Booking"
             placeholderTextColor="#64748B"
-            className="bg-[#243447] rounded-xl px-4 h-11 text-white text-sm mb-3"
+            className="mb-3 h-11 rounded-xl bg-[#243447] px-4 text-sm text-white"
           />
 
-          <Text className="text-gray-400 text-xs mb-1">Project Domain (optional)</Text>
+          <Text className="mb-1 text-xs text-gray-400">Project Domain (optional)</Text>
           <TextInput
             value={projectDomain}
             onChangeText={setProjectDomain}
             placeholder="e.g. Education, Healthcare, Logistics"
             placeholderTextColor="#64748B"
-            className="bg-[#243447] rounded-xl px-4 h-11 text-white text-sm mb-3"
+            className="mb-3 h-11 rounded-xl bg-[#243447] px-4 text-sm text-white"
           />
 
-          <Text className="text-gray-400 text-xs mb-1">Team Context (optional)</Text>
+          <Text className="mb-1 text-xs text-gray-400">Team Context (optional)</Text>
           <TextInput
             value={teamContext}
             onChangeText={setTeamContext}
             placeholder="e.g. Team of 5 with mobile + backend skills"
             placeholderTextColor="#64748B"
-            className="bg-[#243447] rounded-xl px-4 h-11 text-white text-sm mb-3"
+            className="mb-3 h-11 rounded-xl bg-[#243447] px-4 text-sm text-white"
           />
 
-          <Text className="text-gray-400 text-xs mb-1">Problem Space (optional)</Text>
+          <Text className="mb-1 text-xs text-gray-400">Problem Space (optional)</Text>
           <TextInput
             value={problemSpace}
             onChangeText={setProblemSpace}
@@ -275,84 +274,84 @@ const TopicLabScreen = () => {
             multiline
             numberOfLines={3}
             textAlignVertical="top"
-            className="bg-[#243447] rounded-xl px-4 py-3 text-white text-sm min-h-[84px] mb-3"
+            className="mb-3 min-h-[84px] rounded-xl bg-[#243447] px-4 py-3 text-sm text-white"
           />
 
-          <Text className="text-gray-400 text-xs mb-1">Primary Actors Hint (optional)</Text>
+          <Text className="mb-1 text-xs text-gray-400">Primary Actors Hint (optional)</Text>
           <TextInput
             value={primaryActorsHint}
             onChangeText={setPrimaryActorsHint}
             placeholder="e.g. Team Leader, Student, Lecturer"
             placeholderTextColor="#64748B"
-            className="bg-[#243447] rounded-xl px-4 h-11 text-white text-sm mb-4"
+            className="mb-4 h-11 rounded-xl bg-[#243447] px-4 text-sm text-white"
           />
 
           <TouchableOpacity
             onPress={handleGenerateDraft}
             disabled={generating}
             activeOpacity={0.8}
-            className={`rounded-xl py-3.5 items-center ${generating ? 'bg-[#334155]' : 'bg-[#7C3AED]'}`}
-          >
+            className={`items-center rounded-xl py-3.5 ${generating ? 'bg-[#334155]' : 'bg-[#7C3AED]'}`}>
             {generating ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text className="text-white font-semibold">Generate Draft</Text>
+              <Text className="font-semibold text-white">Generate Draft</Text>
             )}
           </TouchableOpacity>
         </View>
 
         {draft && (
-          <View className="bg-[#1A2332] rounded-2xl p-4 mb-4">
-            <Text className="text-white text-base font-semibold mb-3">Generated Draft</Text>
+          <View className="mb-4 rounded-2xl bg-[#1A2332] p-4">
+            <Text className="mb-3 text-base font-semibold text-white">Generated Draft</Text>
 
             <View className="mb-3">
-              <Text className="text-gray-500 text-[11px] uppercase mb-1">Topic Name</Text>
-              <Text className="text-white text-sm font-semibold">{draft.topic_name}</Text>
+              <Text className="mb-1 text-[11px] uppercase text-gray-500">Topic Name</Text>
+              <Text className="text-sm font-semibold text-white">{draft.topic_name}</Text>
             </View>
 
             <View className="mb-3">
-              <Text className="text-gray-500 text-[11px] uppercase mb-1">Context</Text>
-              <Text className="text-gray-300 text-sm leading-5">{draft.context}</Text>
+              <Text className="mb-1 text-[11px] uppercase text-gray-500">Context</Text>
+              <Text className="text-sm leading-5 text-gray-300">{draft.context}</Text>
             </View>
 
             <View className="mb-3">
-              <Text className="text-gray-500 text-[11px] uppercase mb-1">Problem Statement</Text>
-              <Text className="text-gray-300 text-sm leading-5">{draft.problem_statement}</Text>
+              <Text className="mb-1 text-[11px] uppercase text-gray-500">Problem Statement</Text>
+              <Text className="text-sm leading-5 text-gray-300">{draft.problem_statement}</Text>
             </View>
 
             <View className="mb-3">
-              <Text className="text-gray-500 text-[11px] uppercase mb-1">Primary Actors</Text>
-              <Text className="text-gray-300 text-sm leading-5">{draft.primary_actors}</Text>
+              <Text className="mb-1 text-[11px] uppercase text-gray-500">Primary Actors</Text>
+              <Text className="text-sm leading-5 text-gray-300">{draft.primary_actors}</Text>
             </View>
 
             <View className="mb-4">
-              <Text className="text-gray-500 text-[11px] uppercase mb-1">Uniqueness Rationale</Text>
-              <Text className="text-gray-300 text-sm leading-5">{draft.uniqueness_rationale}</Text>
+              <Text className="mb-1 text-[11px] uppercase text-gray-500">Uniqueness Rationale</Text>
+              <Text className="text-sm leading-5 text-gray-300">{draft.uniqueness_rationale}</Text>
             </View>
 
             <TouchableOpacity
               onPress={handleApplyDraft}
               disabled={applyingDraft}
               activeOpacity={0.8}
-              className={`rounded-xl py-3.5 items-center ${applyingDraft ? 'bg-[#334155]' : 'bg-[#F59E0B]'}`}
-            >
+              className={`items-center rounded-xl py-3.5 ${applyingDraft ? 'bg-[#334155]' : 'bg-[#F59E0B]'}`}>
               {applyingDraft ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
-                <Text className="text-white font-semibold">Create and Apply to Group</Text>
+                <Text className="font-semibold text-white">Create and Apply to Group</Text>
               )}
             </TouchableOpacity>
           </View>
         )}
 
-        <View className="bg-[#1A2332] rounded-2xl p-4">
-          <Text className="text-white text-base font-semibold mb-2">Available Topics</Text>
-          <Text className="text-gray-500 text-xs mb-3">Pick an existing topic and apply directly to this group</Text>
+        <View className="rounded-2xl bg-[#1A2332] p-4">
+          <Text className="mb-2 text-base font-semibold text-white">Available Topics</Text>
+          <Text className="mb-3 text-xs text-gray-500">
+            Pick an existing topic and apply directly to this group
+          </Text>
 
           {loadingTopics ? (
             <ActivityIndicator size="small" color="#7C3AED" style={{ paddingVertical: 12 }} />
           ) : availableTopics.length === 0 ? (
-            <Text className="text-gray-500 text-sm py-2">No available topics found.</Text>
+            <Text className="py-2 text-sm text-gray-500">No available topics found.</Text>
           ) : (
             <View className="gap-2">
               {availableTopics.map((topic) => {
@@ -362,16 +361,17 @@ const TopicLabScreen = () => {
                     key={topic.id}
                     onPress={() => setSelectedTopicId(topic.id)}
                     activeOpacity={0.8}
-                    className={`rounded-xl p-3 border ${isSelected ? 'border-[#7C3AED] bg-[#7C3AED]/10' : 'border-white/10 bg-[#243447]'}`}
-                  >
+                    className={`rounded-xl border p-3 ${isSelected ? 'border-[#7C3AED] bg-[#7C3AED]/10' : 'border-white/10 bg-[#243447]'}`}>
                     <View className="flex-row items-center justify-between">
-                      <Text className={`text-sm font-semibold ${isSelected ? 'text-[#C4B5FD]' : 'text-white'}`} numberOfLines={1}>
+                      <Text
+                        className={`text-sm font-semibold ${isSelected ? 'text-[#C4B5FD]' : 'text-white'}`}
+                        numberOfLines={1}>
                         {topic.name}
                       </Text>
                       {isSelected && <Feather name="check-circle" size={16} color="#7C3AED" />}
                     </View>
                     {!!topic.description && (
-                      <Text className="text-gray-400 text-xs mt-1" numberOfLines={2}>
+                      <Text className="mt-1 text-xs text-gray-400" numberOfLines={2}>
                         {topic.description}
                       </Text>
                     )}
@@ -385,12 +385,11 @@ const TopicLabScreen = () => {
             onPress={handleApplyExisting}
             disabled={!selectedTopic || applyingExisting}
             activeOpacity={0.8}
-            className={`rounded-xl py-3.5 items-center mt-4 ${!selectedTopic || applyingExisting ? 'bg-[#334155]' : 'bg-[#0EA5E9]'}`}
-          >
+            className={`mt-4 items-center rounded-xl py-3.5 ${!selectedTopic || applyingExisting ? 'bg-[#334155]' : 'bg-[#0EA5E9]'}`}>
             {applyingExisting ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text className="text-white font-semibold">Apply Selected Topic</Text>
+              <Text className="font-semibold text-white">Apply Selected Topic</Text>
             )}
           </TouchableOpacity>
         </View>

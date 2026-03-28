@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AuthResponse, UserProfile } from '../../services/authService';
+import { clearAccessToken, saveAccessToken } from '@/utils/auth/session';
+import { debugLog } from '@/utils/debug/log';
 
 // ==================== Types ====================
 
@@ -34,7 +36,7 @@ export const useUserStore = create<UserState>()(
 
       login: async (data: AuthResponse) => {
         // Save JWT token for axios interceptor
-        await AsyncStorage.setItem('access_token', data.access_token);
+        await saveAccessToken(data.access_token);
         set({
           userInfo: data.user,
           isAuthenticated: true,
@@ -42,7 +44,10 @@ export const useUserStore = create<UserState>()(
       },
 
       logout: async () => {
-        await AsyncStorage.removeItem('access_token');
+        debugLog('[AUTH DEBUG] logout() called', {
+          at: new Date().toISOString(),
+        });
+        await clearAccessToken();
         set({ userInfo: null, isAuthenticated: false });
       },
     }),

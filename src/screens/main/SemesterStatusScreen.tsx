@@ -44,8 +44,7 @@ const WARNING_ICONS: Record<string, string> = {
   WEEK2_TOPIC_NOT_FINALIZED: 'book-open',
 };
 
-const WEEK_STATUS_COLOR = (status: 'PASS' | 'FAIL') =>
-  status === 'PASS' ? '#22C55E' : '#EF4444';
+const WEEK_STATUS_COLOR = (status: 'PASS' | 'FAIL') => (status === 'PASS' ? '#22C55E' : '#EF4444');
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
@@ -85,14 +84,12 @@ const SemesterStatusScreen = () => {
           }));
 
         // Only keep warnings that explicitly belong to this group
-        const filteredWarnings = warningRes.value.warnings.filter(
-          (w) => w.group_id === groupId,
-        );
+        const filteredWarnings = warningRes.value.warnings.filter((w) => w.group_id === groupId);
 
         setWarnings(filteredWarnings);
         setComplianceClasses(filteredClasses);
-        if (!semester && warningRes.value.semester) {
-          setSemester(warningRes.value.semester);
+        if (warningRes.value.semester) {
+          setSemester((current) => current ?? warningRes.value.semester);
         }
       }
       if (reviewRes.status === 'fulfilled') {
@@ -108,14 +105,14 @@ const SemesterStatusScreen = () => {
   useFocusEffect(
     useCallback(() => {
       loadData();
-    }, [loadData]),
+    }, [loadData])
   );
 
   // ── Loading ───────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <SafeAreaView className="flex-1 bg-[#101922] items-center justify-center">
+      <SafeAreaView className="flex-1 items-center justify-center bg-[#101922]">
         <ActivityIndicator size="large" color="#7C3AED" />
       </SafeAreaView>
     );
@@ -130,18 +127,15 @@ const SemesterStatusScreen = () => {
         <View className="flex-row items-center px-4 py-3">
           <TouchableOpacity
             onPress={() => navigation.goBack()}
-            className="w-10 h-10 items-center justify-center rounded-xl bg-[#1A2332]"
-          >
+            className="h-10 w-10 items-center justify-center rounded-xl bg-[#1A2332]">
             <Feather name="arrow-left" size={20} color="#fff" />
           </TouchableOpacity>
-          <Text className="text-white text-lg font-bold ml-3">Semester Status</Text>
+          <Text className="ml-3 text-lg font-bold text-white">Semester Status</Text>
         </View>
         <View className="flex-1 items-center justify-center gap-3 px-8">
           <MaterialIcons name="school" size={52} color="#334155" />
-          <Text className="text-gray-500 text-base text-center">
-            No active semester found.
-          </Text>
-          <Text className="text-gray-600 text-sm text-center">
+          <Text className="text-center text-base text-gray-500">No active semester found.</Text>
+          <Text className="text-center text-sm text-gray-600">
             Check back when a new semester starts.
           </Text>
         </View>
@@ -164,35 +158,29 @@ const SemesterStatusScreen = () => {
       <View className="flex-row items-center px-4 py-3">
         <TouchableOpacity
           onPress={() => navigation.goBack()}
-          className="w-10 h-10 items-center justify-center rounded-xl bg-[#1A2332]"
-        >
+          className="h-10 w-10 items-center justify-center rounded-xl bg-[#1A2332]">
           <Feather name="arrow-left" size={20} color="#fff" />
         </TouchableOpacity>
-        <View className="flex-1 ml-3">
-          <Text className="text-white text-lg font-bold">Semester Status</Text>
-          <Text className="text-gray-500 text-xs">{semester.name}</Text>
+        <View className="ml-3 flex-1">
+          <Text className="text-lg font-bold text-white">Semester Status</Text>
+          <Text className="text-xs text-gray-500">{semester.name}</Text>
         </View>
       </View>
 
       <ScrollView
         className="flex-1 px-4"
         contentContainerStyle={{ paddingBottom: 40 }}
-        showsVerticalScrollIndicator={false}
-      >
+        showsVerticalScrollIndicator={false}>
         {/* ── Semester Info Card ──────────────────────────────── */}
-        <View className="bg-[#1A2332] rounded-2xl p-4 mt-2 mb-4">
-          <View className="flex-row items-center justify-between mb-3">
+        <View className="mb-4 mt-2 rounded-2xl bg-[#1A2332] p-4">
+          <View className="mb-3 flex-row items-center justify-between">
             <View className="flex-row items-center gap-2">
-              <View
-                className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: statusColor }}
-              />
-              <Text className="text-white font-bold text-base">{semester.code}</Text>
+              <View className="h-2 w-2 rounded-full" style={{ backgroundColor: statusColor }} />
+              <Text className="text-base font-bold text-white">{semester.code}</Text>
             </View>
             <View
-              className="px-2.5 py-1 rounded-lg"
-              style={{ backgroundColor: `${statusColor}20` }}
-            >
+              className="rounded-lg px-2.5 py-1"
+              style={{ backgroundColor: `${statusColor}20` }}>
               <Text className="text-xs font-semibold" style={{ color: statusColor }}>
                 {semester.status}
               </Text>
@@ -201,18 +189,18 @@ const SemesterStatusScreen = () => {
 
           <View className="flex-row items-center gap-4">
             <View className="flex-1">
-              <Text className="text-gray-500 text-xs mb-0.5">Current Week</Text>
-              <Text className="text-white font-bold text-2xl">
+              <Text className="mb-0.5 text-xs text-gray-500">Current Week</Text>
+              <Text className="text-2xl font-bold text-white">
                 Week {semester.current_week}
-                <Text className="text-gray-500 text-base font-normal"> / 10</Text>
+                <Text className="text-base font-normal text-gray-500"> / 10</Text>
               </Text>
             </View>
             <View className="flex-1">
-              <Text className="text-gray-500 text-xs mb-0.5">Period</Text>
-              <Text className="text-gray-300 text-xs">
+              <Text className="mb-0.5 text-xs text-gray-500">Period</Text>
+              <Text className="text-xs text-gray-300">
                 {new Date(semester.start_date).toLocaleDateString()} –
               </Text>
-              <Text className="text-gray-300 text-xs">
+              <Text className="text-xs text-gray-300">
                 {new Date(semester.end_date).toLocaleDateString()}
               </Text>
             </View>
@@ -220,7 +208,7 @@ const SemesterStatusScreen = () => {
 
           {/* Week progress bar */}
           <View className="mt-3">
-            <View className="h-2 bg-[#243447] rounded-full overflow-hidden">
+            <View className="h-2 overflow-hidden rounded-full bg-[#243447]">
               <View
                 className="h-full rounded-full bg-[#7C3AED]"
                 style={{ width: `${Math.min((semester.current_week / 10) * 100, 100)}%` }}
@@ -232,15 +220,14 @@ const SemesterStatusScreen = () => {
         {/* ── Active Warnings ─────────────────────────────────── */}
         {warnings.length > 0 && (
           <View className="mb-4">
-            <Text className="text-gray-400 text-xs uppercase tracking-wider mb-2">
+            <Text className="mb-2 text-xs uppercase tracking-wider text-gray-400">
               Action Required
             </Text>
             {warnings.map((w, i) => (
               <View
                 key={i}
-                className="rounded-2xl p-4 mb-2 flex-row items-start gap-3"
-                style={{ backgroundColor: `${WARNING_COLORS[w.code] || '#EAB308'}18` }}
-              >
+                className="mb-2 flex-row items-start gap-3 rounded-2xl p-4"
+                style={{ backgroundColor: `${WARNING_COLORS[w.code] || '#EAB308'}18` }}>
                 <Feather
                   name={(WARNING_ICONS[w.code] || 'alert-triangle') as any}
                   size={18}
@@ -248,13 +235,12 @@ const SemesterStatusScreen = () => {
                 />
                 <View className="flex-1">
                   <Text
-                    className="font-semibold text-sm mb-0.5"
-                    style={{ color: WARNING_COLORS[w.code] || '#EAB308' }}
-                  >
+                    className="mb-0.5 text-sm font-semibold"
+                    style={{ color: WARNING_COLORS[w.code] || '#EAB308' }}>
                     {w.class_code}
                     {w.group_name ? ` · ${w.group_name}` : ''}
                   </Text>
-                  <Text className="text-gray-300 text-xs leading-4">{w.message}</Text>
+                  <Text className="text-xs leading-4 text-gray-300">{w.message}</Text>
                 </View>
               </View>
             ))}
@@ -264,30 +250,29 @@ const SemesterStatusScreen = () => {
         {/* ── Compliance / Week Checkpoints ───────────────────── */}
         {complianceClasses.length > 0 && (
           <View className="mb-4">
-            <Text className="text-gray-400 text-xs uppercase tracking-wider mb-2">
+            <Text className="mb-2 text-xs uppercase tracking-wider text-gray-400">
               Weekly Checkpoints
             </Text>
             {complianceClasses.map((cls) => (
-              <View key={cls.class_id} className="bg-[#1A2332] rounded-2xl p-4 mb-3">
-                <Text className="text-white font-bold text-sm mb-3">
+              <View key={cls.class_id} className="mb-3 rounded-2xl bg-[#1A2332] p-4">
+                <Text className="mb-3 text-sm font-bold text-white">
                   {cls.class_code}
-                  <Text className="text-gray-500 font-normal"> · {cls.class_name}</Text>
+                  <Text className="font-normal text-gray-500"> · {cls.class_name}</Text>
                 </Text>
 
                 {/* Week 1 checkpoint */}
-                <View className="flex-row items-center justify-between mb-2">
+                <View className="mb-2 flex-row items-center justify-between">
                   <View className="flex-row items-center gap-2">
                     <Feather
                       name={cls.week1_status === 'PASS' ? 'check-circle' : 'circle'}
                       size={16}
                       color={WEEK_STATUS_COLOR(cls.week1_status)}
                     />
-                    <Text className="text-gray-300 text-sm">Week 1 · Joined a group</Text>
+                    <Text className="text-sm text-gray-300">Week 1 · Joined a group</Text>
                   </View>
                   <Text
                     className="text-xs font-bold"
-                    style={{ color: WEEK_STATUS_COLOR(cls.week1_status) }}
-                  >
+                    style={{ color: WEEK_STATUS_COLOR(cls.week1_status) }}>
                     {cls.week1_status}
                   </Text>
                 </View>
@@ -296,28 +281,26 @@ const SemesterStatusScreen = () => {
                 {cls.groups.map((g) => (
                   <View
                     key={g.group_id}
-                    className="flex-row items-center justify-between mb-2 pl-2"
-                  >
-                    <View className="flex-row items-center gap-2 flex-1">
+                    className="mb-2 flex-row items-center justify-between pl-2">
+                    <View className="flex-1 flex-row items-center gap-2">
                       <Feather
                         name={g.week2_status === 'PASS' ? 'check-circle' : 'circle'}
                         size={16}
                         color={WEEK_STATUS_COLOR(g.week2_status)}
                       />
                       <View className="flex-1">
-                        <Text className="text-gray-300 text-sm" numberOfLines={1}>
+                        <Text className="text-sm text-gray-300" numberOfLines={1}>
                           Week 2 · Topic finalized
                         </Text>
-                        <Text className="text-gray-600 text-xs" numberOfLines={1}>
+                        <Text className="text-xs text-gray-600" numberOfLines={1}>
                           {g.group_name}
                           {g.topic_name ? ` · ${g.topic_name}` : ' · No topic yet'}
                         </Text>
                       </View>
                     </View>
                     <Text
-                      className="text-xs font-bold ml-2"
-                      style={{ color: WEEK_STATUS_COLOR(g.week2_status) }}
-                    >
+                      className="ml-2 text-xs font-bold"
+                      style={{ color: WEEK_STATUS_COLOR(g.week2_status) }}>
                       {g.week2_status}
                     </Text>
                   </View>
@@ -330,17 +313,15 @@ const SemesterStatusScreen = () => {
         {/* ── Review Milestone ────────────────────────────────── */}
         {milestone && reviewGroups.length > 0 && (
           <View className="mb-4">
-            <View className="flex-row items-center justify-between mb-2">
-              <Text className="text-gray-400 text-xs uppercase tracking-wider">
-                Review Status
-              </Text>
-              <View className="bg-[#7C3AED]/20 px-2.5 py-1 rounded-lg">
-                <Text className="text-[#7C3AED] text-xs font-semibold">
+            <View className="mb-2 flex-row items-center justify-between">
+              <Text className="text-xs uppercase tracking-wider text-gray-400">Review Status</Text>
+              <View className="rounded-lg bg-[#7C3AED]/20 px-2.5 py-1">
+                <Text className="text-xs font-semibold text-[#7C3AED]">
                   {MILESTONE_LABELS[milestone.code] || milestone.code}
                 </Text>
               </View>
             </View>
-            <Text className="text-gray-600 text-xs mb-3">
+            <Text className="mb-3 text-xs text-gray-600">
               Week {milestone.week_start}–{milestone.week_end}
             </Text>
 
@@ -352,12 +333,10 @@ const SemesterStatusScreen = () => {
 
         {/* No data fallback */}
         {warnings.length === 0 && complianceClasses.length === 0 && !milestone && (
-          <View className="items-center justify-center mt-16 gap-3">
+          <View className="mt-16 items-center justify-center gap-3">
             <Feather name="check-circle" size={44} color="#334155" />
-            <Text className="text-gray-500 text-sm text-center">
-              Everything looks good.
-            </Text>
-            <Text className="text-gray-600 text-xs text-center">
+            <Text className="text-center text-sm text-gray-500">Everything looks good.</Text>
+            <Text className="text-center text-xs text-gray-600">
               No warnings or active review milestone this week.
             </Text>
           </View>
@@ -374,21 +353,18 @@ const ReviewGroupCard = ({ group }: { group: ReviewGroup }) => {
   const statusColor = isReviewed ? '#22C55E' : '#64748B';
 
   return (
-    <View className="bg-[#1A2332] rounded-2xl p-4 mb-3">
+    <View className="mb-3 rounded-2xl bg-[#1A2332] p-4">
       {/* Group header */}
-      <View className="flex-row items-start justify-between mb-3">
-        <View className="flex-1 mr-3">
-          <Text className="text-white font-bold text-sm" numberOfLines={1}>
+      <View className="mb-3 flex-row items-start justify-between">
+        <View className="mr-3 flex-1">
+          <Text className="text-sm font-bold text-white" numberOfLines={1}>
             {group.group_name}
           </Text>
-          <Text className="text-gray-500 text-xs mt-0.5" numberOfLines={1}>
+          <Text className="mt-0.5 text-xs text-gray-500" numberOfLines={1}>
             {group.class_code} · {group.topic_name || 'No topic'}
           </Text>
         </View>
-        <View
-          className="px-2.5 py-1 rounded-lg"
-          style={{ backgroundColor: `${statusColor}20` }}
-        >
+        <View className="rounded-lg px-2.5 py-1" style={{ backgroundColor: `${statusColor}20` }}>
           <Text className="text-xs font-semibold" style={{ color: statusColor }}>
             {isReviewed ? 'Reviewed' : 'Pending'}
           </Text>
@@ -398,7 +374,7 @@ const ReviewGroupCard = ({ group }: { group: ReviewGroup }) => {
       {isReviewed ? (
         <>
           {/* Scores */}
-          <View className="flex-row gap-2 mb-3">
+          <View className="mb-3 flex-row gap-2">
             <ScoreBadge label="Tasks" value={group.scores.task_progress_score} />
             <ScoreBadge label="Commits" value={group.scores.commit_contribution_score} />
             <ScoreBadge label="Milestone" value={group.scores.review_milestone_score} />
@@ -408,48 +384,46 @@ const ReviewGroupCard = ({ group }: { group: ReviewGroup }) => {
           </View>
 
           {/* Snapshot */}
-          <View className="flex-row gap-4 bg-[#243447] rounded-xl p-3">
-            <View className="items-center flex-1">
-              <Text className="text-white font-bold text-base">
+          <View className="flex-row gap-4 rounded-xl bg-[#243447] p-3">
+            <View className="flex-1 items-center">
+              <Text className="text-base font-bold text-white">
                 {group.snapshot.task_done}/{group.snapshot.task_total}
               </Text>
-              <Text className="text-gray-500 text-[10px] mt-0.5">Tasks Done</Text>
+              <Text className="mt-0.5 text-[10px] text-gray-500">Tasks Done</Text>
             </View>
             {group.snapshot.commit_total !== null && (
-              <View className="items-center flex-1">
-                <Text className="text-white font-bold text-base">
+              <View className="flex-1 items-center">
+                <Text className="text-base font-bold text-white">
                   {group.snapshot.commit_total}
                 </Text>
-                <Text className="text-gray-500 text-[10px] mt-0.5">Commits</Text>
+                <Text className="mt-0.5 text-[10px] text-gray-500">Commits</Text>
               </View>
             )}
             {group.snapshot.commit_contributors !== null && (
-              <View className="items-center flex-1">
-                <Text className="text-white font-bold text-base">
+              <View className="flex-1 items-center">
+                <Text className="text-base font-bold text-white">
                   {group.snapshot.commit_contributors}
                 </Text>
-                <Text className="text-gray-500 text-[10px] mt-0.5">Contributors</Text>
+                <Text className="mt-0.5 text-[10px] text-gray-500">Contributors</Text>
               </View>
             )}
           </View>
 
           {/* Lecturer note */}
           {!!group.lecturer_note && (
-            <View className="mt-3 bg-[#243447] rounded-xl p-3">
-              <Text className="text-gray-400 text-[10px] uppercase tracking-wider mb-1">
+            <View className="mt-3 rounded-xl bg-[#243447] p-3">
+              <Text className="mb-1 text-[10px] uppercase tracking-wider text-gray-400">
                 Lecturer Note
               </Text>
-              <Text className="text-gray-300 text-xs leading-4">{group.lecturer_note}</Text>
+              <Text className="text-xs leading-4 text-gray-300">{group.lecturer_note}</Text>
             </View>
           )}
         </>
       ) : (
         /* Pending state */
-        <View className="flex-row items-center gap-2 bg-[#243447] rounded-xl p-3">
+        <View className="flex-row items-center gap-2 rounded-xl bg-[#243447] p-3">
           <Feather name="clock" size={14} color="#64748B" />
-          <Text className="text-gray-500 text-xs">
-            Waiting for lecturer review this milestone.
-          </Text>
+          <Text className="text-xs text-gray-500">Waiting for lecturer review this milestone.</Text>
         </View>
       )}
 
@@ -459,8 +433,8 @@ const ReviewGroupCard = ({ group }: { group: ReviewGroup }) => {
           {group.warnings
             .filter((w) => w !== 'REVIEW_NOT_CAPTURED')
             .map((w) => (
-              <View key={w} className="bg-[#7C2D12]/30 px-2 py-0.5 rounded-md">
-                <Text className="text-orange-300 text-[10px]">
+              <View key={w} className="rounded-md bg-[#7C2D12]/30 px-2 py-0.5">
+                <Text className="text-[10px] text-orange-300">
                   {w === 'NO_TASK_EVIDENCE' ? 'No task evidence' : 'No commit evidence'}
                 </Text>
               </View>
@@ -481,12 +455,11 @@ const ScoreBadge = ({
   highlight?: boolean;
 }) => (
   <View
-    className={`flex-1 items-center rounded-xl py-2 ${highlight ? 'bg-[#7C3AED]/20' : 'bg-[#243447]'}`}
-  >
-    <Text className={`font-bold text-sm ${highlight ? 'text-[#7C3AED]' : 'text-white'}`}>
+    className={`flex-1 items-center rounded-xl py-2 ${highlight ? 'bg-[#7C3AED]/20' : 'bg-[#243447]'}`}>
+    <Text className={`text-sm font-bold ${highlight ? 'text-[#7C3AED]' : 'text-white'}`}>
       {value !== null ? value.toFixed(1) : '–'}
     </Text>
-    <Text className="text-gray-500 text-[10px] mt-0.5">{label}</Text>
+    <Text className="mt-0.5 text-[10px] text-gray-500">{label}</Text>
   </View>
 );
 

@@ -166,7 +166,7 @@ export const getTasks = async (query: GetTasksQuery): Promise<TaskItem[]> => {
         status: mapStatusToBe(query.status),
       },
       expectedErrorStatuses: [404],
-    } as any,
+    } as any
   );
 
   const payload = response.data;
@@ -181,9 +181,7 @@ export const getTasks = async (query: GetTasksQuery): Promise<TaskItem[]> => {
  * List tasks with backend pagination metadata.
  * GET /api/tasks
  */
-export const getTasksPaginated = async (
-  query: GetTasksQuery,
-): Promise<PaginatedTasksResponse> => {
+export const getTasksPaginated = async (query: GetTasksQuery): Promise<PaginatedTasksResponse> => {
   const response = await axiosClient.get<BePaginatedTasksResponse>(ENDPOINTS.TASKS.LIST, {
     params: {
       ...query,
@@ -213,7 +211,7 @@ export const createTask = async (payload: CreateTaskPayload): Promise<TaskItem> 
     mapCreatePayloadToBe(payload),
     {
       expectedErrorStatuses: [400, 404],
-    } as any,
+    } as any
   );
 
   return mapTaskFromBe(response.data);
@@ -223,16 +221,13 @@ export const createTask = async (payload: CreateTaskPayload): Promise<TaskItem> 
  * Update a task.
  * PATCH /api/tasks/:id
  */
-export const updateTask = async (
-  taskId: string,
-  payload: UpdateTaskPayload,
-): Promise<TaskItem> => {
+export const updateTask = async (taskId: string, payload: UpdateTaskPayload): Promise<TaskItem> => {
   const response = await axiosClient.patch<BeTaskItem>(
     ENDPOINTS.TASKS.UPDATE(taskId),
     mapUpdatePayloadToBe(payload),
     {
       expectedErrorStatuses: [400, 404],
-    } as any,
+    } as any
   );
 
   return mapTaskFromBe(response.data);

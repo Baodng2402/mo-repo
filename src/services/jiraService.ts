@@ -30,8 +30,8 @@ export const getJiraProjects = async (): Promise<JiraProject[]> => {
   const response = await axiosClient.get<JiraProject[] | JiraProjectsWrappedResponse>(
     ENDPOINTS.JIRA.PROJECTS,
     {
-    expectedErrorStatuses: [400],
-    } as any,
+      expectedErrorStatuses: [400],
+    } as any
   );
 
   const payload = response.data;

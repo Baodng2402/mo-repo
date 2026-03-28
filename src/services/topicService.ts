@@ -50,9 +50,7 @@ export const getAvailableTopics = async (): Promise<TopicItem[]> => {
  * Generate/refine a topic draft using AI.
  * POST /api/topics/ai/generate
  */
-export const generateTopicIdea = async (
-  payload: GenerateTopicIdeaPayload,
-): Promise<TopicDraft> => {
+export const generateTopicIdea = async (payload: GenerateTopicIdeaPayload): Promise<TopicDraft> => {
   const response = await axiosClient.post<TopicDraft>(ENDPOINTS.TOPICS.AI_GENERATE, payload, {
     expectedErrorStatuses: [400],
   } as any);
@@ -63,9 +61,7 @@ export const generateTopicIdea = async (
  * Save an AI draft as a real topic.
  * POST /api/topics/ai/create
  */
-export const createTopicFromAi = async (
-  payload: CreateAiTopicPayload,
-): Promise<TopicItem> => {
+export const createTopicFromAi = async (payload: CreateAiTopicPayload): Promise<TopicItem> => {
   const response = await axiosClient.post<TopicItem>(ENDPOINTS.TOPICS.AI_CREATE, payload);
   return response.data;
 };
