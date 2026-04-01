@@ -1,7 +1,7 @@
 import axiosClient from '../api/axiosConfig';
 import ENDPOINTS from '../api/endpoint';
 
-export type TaskStatus = 'TO_DO' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED';
+export type TaskStatus = 'TO_DO' | 'IN_PROGRESS' | 'DONE';
 export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export interface TaskItem {
@@ -12,6 +12,7 @@ export interface TaskItem {
   description?: string;
   status: TaskStatus;
   priority: TaskPriority;
+  assignee_id?: string;
   assignee_name?: string;
   due_at?: string;
   created_at?: string;
@@ -39,6 +40,7 @@ interface BeTaskItem {
   description?: string | null;
   status: BeTaskStatus;
   priority: BeTaskPriority;
+  assignee_id?: string | null;
   assignee_name?: string | null;
   due_at?: string | null;
   created_at?: string;
@@ -86,7 +88,6 @@ export interface GetTasksQuery {
 const mapStatusFromBe = (status: BeTaskStatus): TaskStatus => {
   if (status === 'TODO') return 'TO_DO';
   if (status === 'DONE') return 'DONE';
-  if (status === 'BLOCKED') return 'BLOCKED';
   return 'IN_PROGRESS';
 };
 
@@ -133,6 +134,7 @@ const mapTaskFromBe = (task: BeTaskItem): TaskItem => ({
   description: task.description || undefined,
   status: mapStatusFromBe(task.status),
   priority: mapPriorityFromBe(task.priority),
+  assignee_id: task.assignee_id || undefined,
   assignee_name: task.assignee_name || undefined,
   due_at: task.due_at || undefined,
   created_at: task.created_at,

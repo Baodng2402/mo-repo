@@ -310,7 +310,10 @@ const DashboardScreen = () => {
 
   // ── My tasks: assigned to current user, not done, sorted by due_at ──
   const myTasks = groupTasks
-    .filter((t) => t.status !== 'DONE')
+    .filter((t) => {
+      if (t.status === 'DONE') return false;
+      return t.assignee_id === userInfo?.id;
+    })
     .sort((a, b) => {
       if (!a.due_at && !b.due_at) return 0;
       if (!a.due_at) return 1;
@@ -569,12 +572,12 @@ const DashboardScreen = () => {
             <View className="mx-4 items-center rounded-2xl border border-dashed border-white/10 bg-[#1A2332] p-6">
               <MaterialIcons name="group-add" size={44} color="#475569" />
               <Text className="mb-4 mt-3 text-center text-gray-400">
-                Bạn chưa tham gia nhóm nào
+                You are not part of any group yet. Join or create a group to get started!
               </Text>
               <TouchableOpacity
-                onPress={() => navigation.navigate('MainTabs')}
+                onPress={() => navigation.navigate('Classes' as never)}
                 className="rounded-xl bg-sky-600 px-5 py-3">
-                <Text className="font-semibold text-white">Khám phá nhóm</Text>
+                <Text className="font-semibold text-white">Explore Groups</Text>
               </TouchableOpacity>
             </View>
           )}

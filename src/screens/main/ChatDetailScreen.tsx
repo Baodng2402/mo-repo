@@ -30,6 +30,8 @@ const formatMessageTime = (value: string) => {
     .padStart(2, '0')}`;
 };
 
+const EMPTY_MESSAGES: LocalChatMessage[] = [];
+
 const ChatDetailScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'ChatDetail'>>();
@@ -38,7 +40,7 @@ const ChatDetailScreen = () => {
   const title = route.params.title;
 
   const me = useUserStore((s) => s.userInfo);
-  const messages = useChatStore((s) => s.messagesByConversation[conversationId] || []);
+  const messages = useChatStore((s) => s.messagesByConversation[conversationId] ?? EMPTY_MESSAGES);
   const typing = useChatStore((s) => s.typingByConversation[conversationId]);
   const page = useChatStore((s) => s.paginationByConversation[conversationId]);
   const loadingMessages = useChatStore((s) => s.loadingMessagesByConversation[conversationId]);

@@ -46,6 +46,10 @@ const ENDPOINTS = {
   JIRA: {
     PROJECTS: '/api/jira/projects',
     LINK_PROJECT: '/api/jira/projects/link',
+    PROJECT_ACCESS: (projectKey: string) =>
+      `/api/jira/projects/${encodeURIComponent(projectKey)}/access`,
+    PROJECT_ASSIGNABLE: (projectKey: string) =>
+      `/api/jira/projects/${encodeURIComponent(projectKey)}/assignable`,
   },
 
   TOPICS: {

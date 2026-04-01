@@ -387,6 +387,23 @@ const CreateGroupScreen = () => {
 
       if (isEditMode && editGroupId) {
         await updateGroup(editGroupId, payload);
+
+        // Link the newly selected repo if one was chosen (not previously linked)
+        if (selectedRepo) {
+          try {
+            const [owner, repoName] = selectedRepo.full_name.split('/');
+            await linkRepoToGroup(editGroupId, {
+              repo_url: selectedRepo.html_url,
+              repo_name: repoName || selectedRepo.name,
+              repo_owner: owner || '',
+            });
+          } catch (linkError: any) {
+            debugLog('Failed to link repo to group (edit)', {
+              message: linkError?.message,
+            });
+          }
+        }
+
         const repoFullName =
           selectedRepo?.full_name || parseGithubFullNameFromUrl(payload.github_repo_url);
 
@@ -665,12 +682,11 @@ const CreateGroupScreen = () => {
                       }}
                       className={`flex-row items-center justify-between border-b border-white/5 py-4 ${isSelected ? 'opacity-100' : 'opacity-70'}`}>
                       <View className="flex-1">
-                        <Text className={`text-base ${item ? 'text-white' : 'italic text-gray-400'}`}>
+                        <Text
+                          className={`text-base ${item ? 'text-white' : 'italic text-gray-400'}`}>
                           {item ? item.code : 'None'}
                         </Text>
-                        {item && (
-                          <Text className="mt-0.5 text-xs text-gray-400">{item.name}</Text>
-                        )}
+                        {item && <Text className="mt-0.5 text-xs text-gray-400">{item.name}</Text>}
                       </View>
                       {isSelected && <Feather name="check" size={20} color="#7C3AED" />}
                     </TouchableOpacity>

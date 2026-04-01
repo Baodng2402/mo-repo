@@ -34,7 +34,6 @@ const ConversationsScreen = () => {
 
   const conversations = useChatStore((s) => s.conversations);
   const loading = useChatStore((s) => s.loadingConversations);
-  const connectionState = useChatStore((s) => s.connectionState);
   const loadConversations = useChatStore((s) => s.loadConversations);
 
   const unreadTotal = useMemo(

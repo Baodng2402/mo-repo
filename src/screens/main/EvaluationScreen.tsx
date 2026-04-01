@@ -7,7 +7,6 @@ import {
   ScrollView,
   TextInput,
   ActivityIndicator,
-  Alert,
   Modal,
   KeyboardAvoidingView,
   Platform,
@@ -32,10 +31,10 @@ import type {
   ContributionInput,
 } from '@/services/evaluationService';
 import { useUserStore } from '../../utils/stores/userStore';
-import { debugLog } from '@/utils/debug/log';
 import { showSuccess, showError } from '@/utils/toast';
 import type { GroupDetail } from '@/types/group';
 import type { RootStackParamList } from '@/navigation/AppNavigator';
+import ConfirmModal from '@/components/ConfirmModal';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -53,7 +52,6 @@ const EvaluationScreen = () => {
   const route = useRoute<RouteProp<RootStackParamList, 'Evaluation'>>();
   const { groupId } = route.params;
   const currentUser = useUserStore((s) => s.userInfo);
-  debugLog('[Evaluation] open group', { groupId });
 
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [evaluations, setEvaluations] = useState<EvaluationSummary[]>([]);
@@ -70,6 +68,10 @@ const EvaluationScreen = () => {
   const [formTitle, setFormTitle] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formContribs, setFormContribs] = useState<FormContribution[]>([]);
+
+  // Confirm delete modal
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -194,7 +196,6 @@ const EvaluationScreen = () => {
         });
         setEvaluations((prev) => [created, ...prev]);
         showSuccess('Evaluation created');
-        debugLog('[Evaluation] created', { id: created?.id });
       }
       setFormVisible(false);
     } catch (err: any) {
@@ -206,24 +207,20 @@ const EvaluationScreen = () => {
 
   // ── Delete ────────────────────────────────────────────────────────────────
 
-  const handleDelete = (id: string) => {
-    Alert.alert('Delete Evaluation', 'This action cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteEvaluation(id);
-            setEvaluations((prev) => prev.filter((e) => e.id !== id));
-            if (selectedEval?.id === id) setSelectedEval(null);
-            showSuccess('Evaluation deleted');
-          } catch (err: any) {
-            showError(err.response?.data?.message || 'Failed to delete evaluation');
-          }
-        },
-      },
-    ]);
+  const handleDeleteConfirm = async () => {
+    if (!confirmDelete) return;
+    try {
+      setDeleting(true);
+      await deleteEvaluation(confirmDelete);
+      setEvaluations((prev) => prev.filter((e) => e.id !== confirmDelete));
+      if (selectedEval?.id === confirmDelete) setSelectedEval(null);
+      showSuccess('Evaluation deleted');
+    } catch (err: any) {
+      showError(err.response?.data?.message || 'Failed to delete evaluation');
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(null);
+    }
   };
 
   // ── Loading ───────────────────────────────────────────────────────────────
@@ -239,7 +236,6 @@ const EvaluationScreen = () => {
   // ── Detail View ───────────────────────────────────────────────────────────
 
   if (selectedEval) {
-    const isCreator = selectedEval.created_by.id === currentUser?.id;
     return (
       <SafeAreaView className="flex-1 bg-[#101922]" edges={['top']}>
         <StatusBar barStyle="light-content" backgroundColor="#101922" />
@@ -260,7 +256,7 @@ const EvaluationScreen = () => {
               {new Date(selectedEval.created_at).toLocaleDateString()}
             </Text>
           </View>
-          {(isCreator || isLeader) && (
+          {isLeader && (
             <View className="flex-row gap-2">
               <TouchableOpacity
                 onPress={() => openEditForm(selectedEval)}
@@ -268,7 +264,7 @@ const EvaluationScreen = () => {
                 <Feather name="edit-2" size={16} color="#7C3AED" />
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => handleDelete(selectedEval.id)}
+                onPress={() => setConfirmDelete(selectedEval.id)}
                 className="h-9 w-9 items-center justify-center rounded-xl bg-[#1A2332]">
                 <Feather name="trash-2" size={16} color="#EF4444" />
               </TouchableOpacity>
@@ -328,7 +324,6 @@ const EvaluationScreen = () => {
             ))}
         </ScrollView>
 
-        {/* Form Modal reused for edit */}
         <EvalFormModal
           visible={formVisible}
           editingId={editingId}
@@ -343,6 +338,18 @@ const EvaluationScreen = () => {
           onChangePercent={updatePercent}
           onSave={handleSave}
           onClose={() => setFormVisible(false)}
+        />
+
+        <ConfirmModal
+          visible={!!confirmDelete}
+          title="Delete Evaluation"
+          message="This action cannot be undone. All contribution data will be permanently removed."
+          confirmLabel="Delete"
+          variant="danger"
+          icon="trash-2"
+          loading={deleting}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setConfirmDelete(null)}
         />
       </SafeAreaView>
     );
@@ -430,7 +437,6 @@ const EvaluationScreen = () => {
         )}
       </ScrollView>
 
-      {/* Form modal for create */}
       <EvalFormModal
         visible={formVisible}
         editingId={editingId}
@@ -445,6 +451,18 @@ const EvaluationScreen = () => {
         onChangePercent={updatePercent}
         onSave={handleSave}
         onClose={() => setFormVisible(false)}
+      />
+
+      <ConfirmModal
+        visible={!!confirmDelete}
+        title="Delete Evaluation"
+        message="This action cannot be undone. All contribution data will be permanently removed."
+        confirmLabel="Delete"
+        variant="danger"
+        icon="trash-2"
+        loading={deleting}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setConfirmDelete(null)}
       />
     </SafeAreaView>
   );
@@ -483,7 +501,6 @@ const EvalFormModal = ({
   onSave,
   onClose,
 }: EvalFormModalProps) => {
-  const isValid = isFormValid;
   const roundedTotal = Math.round(totalPercent * 100) / 100;
 
   return (
@@ -609,10 +626,10 @@ const EvalFormModal = ({
           <View className="border-t border-white/5 px-4 pb-6 pt-2">
             <TouchableOpacity
               onPress={onSave}
-              disabled={saving || !isValid}
+              disabled={saving || !isFormValid}
               activeOpacity={0.8}
               className={`flex-row items-center justify-center gap-2 rounded-xl py-3.5 ${
-                saving || !isValid ? 'bg-[#334155]' : 'bg-[#7C3AED]'
+                saving || !isFormValid ? 'bg-[#334155]' : 'bg-[#7C3AED]'
               }`}>
               {saving ? (
                 <ActivityIndicator size="small" color="#fff" />

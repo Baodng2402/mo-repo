@@ -138,13 +138,6 @@ const SettingsScreen = () => {
         <View className="px-4">
           <Text className="mb-2 ml-1 text-xs font-semibold text-gray-600">ACCOUNT</Text>
           <SettingItem
-            icon="lock"
-            iconColor="#06B6D4"
-            title="Change Password"
-            subtitle="Update your password"
-            onPress={() => {}}
-          />
-          <SettingItem
             icon="link"
             iconColor="#22C55E"
             title="Linked Accounts"

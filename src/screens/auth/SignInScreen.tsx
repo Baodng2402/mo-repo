@@ -152,11 +152,6 @@ const SignInScreen = ({ navigation }: Props) => {
               </View>
             </View>
 
-            {/* Forgot Password */}
-            <TouchableOpacity className="mb-2 self-end">
-              <Text className="text-sm font-medium text-[#7C3AED]">Forgot Password?</Text>
-            </TouchableOpacity>
-
             {/* Sign In Button */}
             <TouchableOpacity
               onPress={handleSignIn}

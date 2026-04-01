@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DashboardScreen from '@/screens/main/DashboardScreen';
 import ClassesScreen from '@/screens/main/ClassesScreen';
 import TasksScreen from '@/screens/main/TasksScreen';
-import NewsfeedScreen from '@/screens/main/NewsfeedScreen';
 import SettingsScreen from '@/screens/main/SettingsScreen';
 import ConversationsScreen from '@/screens/main/ConversationsScreen';
 import { useChatLifecycle } from '@/hooks/useChatLifecycle';
@@ -20,7 +19,6 @@ export type MainTabParamList = {
   Classes: undefined;
   Tasks: undefined;
   Chats: undefined;
-  Newsfeed: undefined;
   Settings: undefined;
 };
 
@@ -34,7 +32,6 @@ const TABS = [
   { key: 'Classes', icon: 'book-open', label: 'Classes' },
   { key: 'Tasks', icon: 'check-square', label: 'Tasks' },
   { key: 'Chats', icon: 'message-circle', label: 'Chats' },
-  { key: 'Newsfeed', icon: 'message-square', label: 'Feed' },
   { key: 'Settings', icon: 'settings', label: 'Settings' },
 ];
 
@@ -154,7 +151,6 @@ const MainTabNavigator = () => {
       <Tab.Screen name="Classes" component={ClassesScreen} />
       <Tab.Screen name="Tasks" component={TasksScreen} />
       <Tab.Screen name="Chats" component={ConversationsScreen} />
-      <Tab.Screen name="Newsfeed" component={NewsfeedScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );

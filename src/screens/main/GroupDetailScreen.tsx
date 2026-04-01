@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   Alert,
   View,
@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@/components/icons';
 import { MaterialIcons } from '@/components/icons';
+import DatePickerModal from '@/components/DatePickerModal';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -29,7 +30,7 @@ import {
   deleteGroup,
   getGroupRepos,
 } from '@/services/groupService';
-import { getJiraProjects } from '@/services/jiraService';
+import { getJiraProjects, checkJiraProjectAssignable } from '@/services/jiraService';
 import { getContributorStats, getCommits } from '@/services/githubService';
 import {
   createTask,
@@ -74,7 +75,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const PRIORITY_OPTIONS: TaskPriority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 // Status options for EDIT only — create status is controlled by BE based on assignee
-const EDIT_STATUS_OPTIONS: TaskStatus[] = ['IN_PROGRESS', 'DONE', 'BLOCKED'];
+const EDIT_STATUS_OPTIONS: TaskStatus[] = ['IN_PROGRESS', 'DONE'];
 const TASK_PAGE_SIZE = 30;
 
 // Quick move: IN_PROGRESS → DONE → IN_PROGRESS (reopen)
@@ -114,6 +115,27 @@ const resolveMemberRole = (member: any): MembershipRole | undefined => {
   return undefined;
 };
 
+const getApiErrorMessage = (error: any, fallback: string): string => {
+  const message = error?.response?.data?.message;
+  if (typeof message === 'string' && message.trim()) {
+    return message;
+  }
+
+  if (Array.isArray(message)) {
+    const joined = message.filter((m) => typeof m === 'string').join('\n');
+    if (joined.trim()) {
+      return joined;
+    }
+  }
+
+  const errorText = error?.response?.data?.error;
+  if (typeof errorText === 'string' && errorText.trim()) {
+    return errorText;
+  }
+
+  return fallback;
+};
+
 // ==================== Component ====================
 
 const GroupDetailScreen = () => {
@@ -125,6 +147,7 @@ const GroupDetailScreen = () => {
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [jiraSiteUrl, setJiraSiteUrl] = useState<string | null>(null);
+  const [memberJiraAccess, setMemberJiraAccess] = useState<boolean | null>(null);
 
   // GitHub linked repos & contributor stats
   const [linkedRepos, setLinkedRepos] = useState<GroupRepo[]>([]);
@@ -146,7 +169,9 @@ const GroupDetailScreen = () => {
   const [formPriority, setFormPriority] = useState<TaskPriority>('MEDIUM');
   const [formStatus, setFormStatus] = useState<TaskStatus>('IN_PROGRESS');
   const [formDueDate, setFormDueDate] = useState('');
+  const [dueDatePickerVisible, setDueDatePickerVisible] = useState(false);
   const [formAssigneeId, setFormAssigneeId] = useState<string | null>(null);
+  const [taskFormError, setTaskFormError] = useState('');
 
   // ── Derived State ───────────────────────────────
 
@@ -160,39 +185,6 @@ const GroupDetailScreen = () => {
   const isLeader = currentMemberRole === 'LEADER';
   const isAdmin = currentMemberRole === 'MENTOR';
   const currentRank = ROLE_RANK[currentMemberRole || 'MEMBER'] ?? 0;
-
-  useEffect(() => {
-    if (!group) return;
-
-    const memberDebug = (group.members || []).map((m: any) => ({
-      id: m?.id,
-      user_id: m?.user_id,
-      email: m?.email,
-      role_in_group: m?.role_in_group,
-      role: m?.role,
-      resolvedUserId: resolveMemberUserId(m),
-      resolvedRole: resolveMemberRole(m),
-    }));
-
-    debugLog('[GroupDetail][RoleCheck] currentUser', {
-      id: currentUser?.id,
-      email: currentUser?.email,
-      role: currentUser?.role,
-    });
-    debugLog('[GroupDetail][RoleCheck] members', memberDebug);
-    debugLog('[GroupDetail][RoleCheck] resolved', {
-      currentMember,
-      currentMemberRole,
-      isLeader,
-      isAdmin,
-    });
-
-    if (!currentMember) {
-      debugLog(
-        '[GroupDetail][RoleCheck] current user not matched in group members. Leader-only buttons will be hidden.'
-      );
-    }
-  }, [group, currentUser, currentMember, currentMemberRole, isLeader, isAdmin]);
 
   /** Check if current user outranks a target member */
   const canRemove = (target: GroupMember) =>
@@ -286,6 +278,29 @@ const GroupDetailScreen = () => {
             }
           })
           .catch(() => {});
+
+        // Check if current user is assignable in the Jira project (fire-and-forget)
+        // Only check non-leaders — leaders are expected to manage the project themselves
+        const memberInData = data.members?.find((m: any) => {
+          const mid = m?.id || m?.user_id || '';
+          return (
+            (currentUser?.id && mid === currentUser.id) ||
+            (currentUser?.email && m?.email === currentUser.email)
+          );
+        });
+        const roleInData = memberInData?.role_in_group;
+        if (roleInData !== 'LEADER') {
+          setMemberJiraAccess(null);
+          checkJiraProjectAssignable(data.jira_project_key)
+            .then((assignable) => {
+              setMemberJiraAccess(assignable);
+            })
+            .catch(() => {
+              setMemberJiraAccess(null);
+            });
+        } else {
+          setMemberJiraAccess(true);
+        }
       }
 
       await fetchTasks(true, data.jira_project_key);
@@ -360,7 +375,7 @@ const GroupDetailScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [fetchTasks, groupId, navigation]);
+  }, [currentUser?.email, currentUser?.id, fetchTasks, groupId, navigation]);
 
   useFocusEffect(
     useCallback(() => {
@@ -417,7 +432,9 @@ const GroupDetailScreen = () => {
     setFormPriority('MEDIUM');
     setFormStatus('IN_PROGRESS');
     setFormDueDate('');
+    setDueDatePickerVisible(false);
     setFormAssigneeId(null);
+    setTaskFormError('');
     setTaskFormVisible(true);
   };
 
@@ -434,17 +451,19 @@ const GroupDetailScreen = () => {
       (m) => m.full_name === task.assignee_name || m.email === task.assignee_name
     );
     setFormAssigneeId(matched?.id ?? null);
+    setTaskFormError('');
     setTaskFormVisible(true);
   };
 
   const handleSaveTask = async () => {
     if (!formTitle.trim()) {
-      showError('Task title is required');
+      setTaskFormError('Task title is required.');
       return;
     }
 
     try {
       setSavingTask(true);
+      setTaskFormError('');
 
       if (editingTask) {
         await updateTask(editingTask.id, {
@@ -478,7 +497,7 @@ const GroupDetailScreen = () => {
       setTaskFormVisible(false);
       fetchTasks(true);
     } catch (error: any) {
-      showError(error?.response?.data?.message || 'Failed to save task');
+      setTaskFormError(getApiErrorMessage(error, 'Failed to save task.'));
     } finally {
       setSavingTask(false);
     }
@@ -517,6 +536,55 @@ const GroupDetailScreen = () => {
       fetchTasks(true);
     } catch (error: any) {
       showError(error?.response?.data?.message || 'Failed to update task status');
+    }
+  };
+
+  const alertJiraAccessRequired = () => {
+    Alert.alert(
+      'Jira Access Required',
+      `You are not a member of the Jira project "${group?.jira_project_key}". Ask your leader to add you on Jira before performing this action.`,
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handleMemberMarkDone = async (task: TaskItem) => {
+    if (group?.jira_project_key) {
+      if (memberJiraAccess === false) {
+        alertJiraAccessRequired();
+        return;
+      }
+      if (memberJiraAccess !== true) {
+        showInfo('Checking Jira assignment permission. Please try again in a moment.');
+        return;
+      }
+    }
+    try {
+      await updateTask(task.id, { status: 'DONE' });
+      showSuccess(group?.jira_project_key ? 'Marked done · Jira synced' : 'Task marked as done');
+      fetchTasks(true);
+    } catch (error: any) {
+      showError(error?.response?.data?.message || 'Failed to update task');
+    }
+  };
+
+  const handleClaimTask = async (task: TaskItem) => {
+    if (!currentUser?.id) return;
+    if (group?.jira_project_key) {
+      if (memberJiraAccess === false) {
+        alertJiraAccessRequired();
+        return;
+      }
+      if (memberJiraAccess !== true) {
+        showInfo('Checking Jira assignment permission. Please try again in a moment.');
+        return;
+      }
+    }
+    try {
+      await updateTask(task.id, { assignee_id: currentUser.id });
+      showSuccess('Task claimed');
+      fetchTasks(true);
+    } catch (error: any) {
+      showError(error?.response?.data?.message || 'Failed to claim task');
     }
   };
 
@@ -1036,7 +1104,7 @@ const GroupDetailScreen = () => {
                           <View className="flex-row items-center gap-1 rounded bg-[#F59E0B]/20 px-1.5 py-0.5">
                             <MaterialIcons name="sync-problem" size={10} color="#F59E0B" />
                             <Text className="text-[10px] font-semibold text-[#F59E0B]">
-                              Chưa sync
+                              Not synced to Jira
                             </Text>
                           </View>
                         ) : null}
@@ -1064,16 +1132,16 @@ const GroupDetailScreen = () => {
                         </Text>
                       </View>
                     </View>
-                    {isLeader && (
+                    {isLeader ? (
                       <View className="gap-1">
                         {/* Quick move — label changes based on current status */}
-                        {task.status !== 'BLOCKED' && (
+                        {task.status !== 'DONE' && (
                           <TouchableOpacity
                             onPress={() => handleQuickMoveTask(task)}
                             className="h-8 w-8 items-center justify-center rounded-lg bg-[#243447]"
                             activeOpacity={0.8}>
                             <Feather
-                              name={task.status === 'DONE' ? 'rotate-ccw' : 'arrow-right'}
+                              name={task.status === 'IN_PROGRESS' ? 'rotate-ccw' : 'arrow-right'}
                               size={14}
                               color="#A78BFA"
                             />
@@ -1091,6 +1159,32 @@ const GroupDetailScreen = () => {
                           activeOpacity={0.8}>
                           <Feather name="trash-2" size={14} color="#F87171" />
                         </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View className="gap-1">
+                        {/* Mark done — only if assigned to current user and not yet done */}
+                        {(task.assignee_id
+                          ? task.assignee_id === currentUser?.id
+                          : task.assignee_name &&
+                            (task.assignee_name === currentMember?.full_name ||
+                              task.assignee_name === currentMember?.email)) &&
+                          task.status === 'IN_PROGRESS' && (
+                            <TouchableOpacity
+                              onPress={() => handleMemberMarkDone(task)}
+                              className="h-8 w-8 items-center justify-center rounded-lg bg-[#243447]"
+                              activeOpacity={0.8}>
+                              <Feather name="check" size={14} color="#22C55E" />
+                            </TouchableOpacity>
+                          )}
+                        {/* Claim — only if unassigned TODO */}
+                        {!task.assignee_id && !task.assignee_name && task.status === 'TO_DO' && (
+                          <TouchableOpacity
+                            onPress={() => handleClaimTask(task)}
+                            className="h-8 w-8 items-center justify-center rounded-lg bg-[#243447]"
+                            activeOpacity={0.8}>
+                            <Feather name="user-plus" size={14} color="#60A5FA" />
+                          </TouchableOpacity>
+                        )}
                       </View>
                     )}
                   </View>
@@ -1143,14 +1237,16 @@ const GroupDetailScreen = () => {
 
         {/* ── Leader Actions ───────────────────── */}
         <View className="mx-4 mt-6 gap-3">
-          {/* Evaluation Button (leader only) */}
-          {isLeader && (
+          {/* Evaluation Button — all members can view; label differs by role */}
+          {currentMember && (
             <TouchableOpacity
               onPress={() => navigation.navigate('Evaluation', { groupId: group.id })}
               activeOpacity={0.8}
               className="flex-row items-center justify-center gap-2 rounded-xl bg-[#7C3AED] py-3.5">
               <MaterialIcons name="assessment" size={18} color="#fff" />
-              <Text className="font-semibold text-white">Evaluate Members</Text>
+              <Text className="font-semibold text-white">
+                {isLeader ? 'Evaluate Members' : 'View Evaluations'}
+              </Text>
             </TouchableOpacity>
           )}
 
@@ -1192,7 +1288,10 @@ const GroupDetailScreen = () => {
         visible={isTaskFormVisible}
         animationType="slide"
         transparent
-        onRequestClose={() => setTaskFormVisible(false)}>
+        onRequestClose={() => {
+          setTaskFormError('');
+          setTaskFormVisible(false);
+        }}>
         <View className="flex-1 justify-end bg-black/60">
           <ScrollView
             className="rounded-t-3xl border-t border-white/10 bg-[#101922]"
@@ -1211,7 +1310,12 @@ const GroupDetailScreen = () => {
                   </Text>
                 )}
               </View>
-              <TouchableOpacity onPress={() => setTaskFormVisible(false)} className="p-2">
+              <TouchableOpacity
+                onPress={() => {
+                  setTaskFormError('');
+                  setTaskFormVisible(false);
+                }}
+                className="p-2">
                 <Feather name="x" size={20} color="#fff" />
               </TouchableOpacity>
             </View>
@@ -1319,14 +1423,52 @@ const GroupDetailScreen = () => {
             </View>
 
             {/* Due Date */}
-            <Text className="mb-1 text-xs text-gray-400">Due Date (YYYY-MM-DD)</Text>
-            <TextInput
-              value={formDueDate}
-              onChangeText={setFormDueDate}
-              placeholder="2026-03-25"
-              placeholderTextColor="#64748B"
-              className="mb-5 h-11 rounded-xl bg-[#1A2332] px-4 text-sm text-white"
-            />
+            <Text className="mb-1 text-xs text-gray-400">Due Date</Text>
+            <TouchableOpacity
+              onPress={() => setDueDatePickerVisible(true)}
+              activeOpacity={0.7}
+              className="mb-5 flex-row items-center rounded-xl bg-[#1A2332] px-4"
+              style={{
+                height: 44,
+                borderWidth: formDueDate ? 1 : 0,
+                borderColor: formDueDate ? 'rgba(74,144,255,0.4)' : 'transparent',
+              }}>
+              <Feather
+                name="calendar"
+                size={15}
+                color={formDueDate ? '#93C5FD' : '#64748B'}
+                style={{ marginRight: 10 }}
+              />
+              <Text
+                className="flex-1 text-sm"
+                style={{ color: formDueDate ? '#E2E8F0' : '#64748B' }}>
+                {formDueDate
+                  ? new Date(formDueDate).toLocaleDateString('en-GB', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    })
+                  : 'Select due date'}
+              </Text>
+              {formDueDate ? (
+                <TouchableOpacity
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    setFormDueDate('');
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Feather name="x-circle" size={15} color="#64748B" />
+                </TouchableOpacity>
+              ) : (
+                <Feather name="chevron-right" size={15} color="#475569" />
+              )}
+            </TouchableOpacity>
+
+            {!!taskFormError && (
+              <View className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2.5">
+                <Text className="text-xs font-medium text-red-300">{taskFormError}</Text>
+              </View>
+            )}
 
             <TouchableOpacity
               onPress={handleSaveTask}
@@ -1347,6 +1489,18 @@ const GroupDetailScreen = () => {
           </ScrollView>
         </View>
       </Modal>
+
+      {/* Due Date Picker */}
+      <DatePickerModal
+        visible={dueDatePickerVisible}
+        value={formDueDate ? new Date(formDueDate) : null}
+        title="Select Due Date"
+        onConfirm={(date) => {
+          setFormDueDate(date.toISOString().slice(0, 10));
+          setDueDatePickerVisible(false);
+        }}
+        onCancel={() => setDueDatePickerVisible(false)}
+      />
 
       {/* ═══════════════════════════════════════════════════
                 Confirm Modal (leave / delete / remove member)
