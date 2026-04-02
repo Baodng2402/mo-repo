@@ -35,6 +35,7 @@ import { showSuccess, showError } from '@/utils/toast';
 import type { GroupDetail } from '@/types/group';
 import type { RootStackParamList } from '@/navigation/AppNavigator';
 import ConfirmModal from '@/components/ConfirmModal';
+import { evaluationSchema, getZodErrorMessage } from '@/utils/validation/formSchemas';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -79,7 +80,15 @@ const EvaluationScreen = () => {
     group?.members?.find((m) => m.id === currentUser?.id)?.role_in_group === 'LEADER';
 
   const totalPercent = formContribs.reduce((s, c) => s + c.contribution_percent, 0);
-  const isFormValid = formTitle.trim().length > 0 && Math.abs(totalPercent - 100) <= 0.05;
+  const hasInvalidContribution = formContribs.some(
+    (c) => !Number.isFinite(c.contribution_percent) || c.contribution_percent < 0
+  );
+  const isFormValid =
+    evaluationSchema.safeParse({
+      title: formTitle,
+      description: formDesc,
+      totalPercent,
+    }).success && !hasInvalidContribution;
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
@@ -168,20 +177,33 @@ const EvaluationScreen = () => {
   // ── Save ──────────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
-    if (!isFormValid) return;
+    const parsed = evaluationSchema.safeParse({
+      title: formTitle,
+      description: formDesc,
+      totalPercent,
+    });
+    if (!parsed.success) {
+      showError(getZodErrorMessage(parsed.error));
+      return;
+    }
+
+    if (hasInvalidContribution) {
+      showError('Contribution percentages must be valid non-negative numbers');
+      return;
+    }
 
     const contributions: ContributionInput[] = formContribs.map((c) => ({
       user_id: c.user_id,
       contribution_percent: c.contribution_percent,
-      note: c.note || undefined,
+      note: c.note.trim() || undefined,
     }));
 
     try {
       setSaving(true);
       if (editingId) {
         const updated = await updateEvaluation(editingId, {
-          title: formTitle,
-          description: formDesc || undefined,
+          title: parsed.data.title,
+          description: parsed.data.description,
           contributions,
         });
         setEvaluations((prev) => prev.map((e) => (e.id === editingId ? updated : e)));
@@ -190,8 +212,8 @@ const EvaluationScreen = () => {
       } else {
         const created = await createEvaluation({
           group_id: groupId,
-          title: formTitle,
-          description: formDesc || undefined,
+          title: parsed.data.title,
+          description: parsed.data.description,
           contributions,
         });
         setEvaluations((prev) => [created, ...prev]);
@@ -544,7 +566,7 @@ const EvalFormModal = ({
 
             {/* Description */}
             <Text className="mb-1.5 mt-4 text-xs uppercase tracking-wider text-gray-400">
-              Description (optional)
+              Description *
             </Text>
             <TextInput
               value={desc}

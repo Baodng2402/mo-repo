@@ -22,6 +22,7 @@ import { getAllClasses, getMyClasses, joinClass } from '@/services/classService'
 import { showError, showSuccess } from '@/utils/toast';
 import type { ClassItem, ClassStatus } from '@/types/class';
 import type { RootStackParamList } from '@/navigation/AppNavigator';
+import { enrollmentKeySchema, getZodErrorMessage } from '@/utils/validation/formSchemas';
 
 // ==================== Constants ====================
 
@@ -194,11 +195,17 @@ const ClassesScreen = () => {
   }, []);
 
   const handleJoinClass = useCallback(async () => {
-    if (!selectedClass || !enrollmentKey.trim()) return;
+    if (!selectedClass) return;
+
+    const parsed = enrollmentKeySchema.safeParse({ enrollmentKey });
+    if (!parsed.success) {
+      showError(getZodErrorMessage(parsed.error));
+      return;
+    }
 
     try {
       setJoining(true);
-      await joinClass(selectedClass.id, { enrollment_key: enrollmentKey.trim() });
+      await joinClass(selectedClass.id, { enrollment_key: parsed.data.enrollmentKey });
       showSuccess(`Joined ${selectedClass.code} successfully!`, 'Enrolled 🎉');
       setJoinModalVisible(false);
       fetchData(true);

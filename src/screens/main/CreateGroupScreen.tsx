@@ -25,6 +25,11 @@ import { getCurrentSemester, type SerializedSemester } from '@/services/semester
 import { debugLog } from '@/utils/debug/log';
 import { showSuccess, showError } from '@/utils/toast';
 import type { RootStackParamList } from '@/navigation/AppNavigator';
+import {
+  createRepoSchema,
+  getZodErrorMessage,
+  groupFormSchema,
+} from '@/utils/validation/formSchemas';
 
 // ==================== Types ====================
 
@@ -54,6 +59,7 @@ const FORM_FIELDS: FormField[] = [
     key: 'project_name',
     label: 'Project Name',
     placeholder: 'e.g. E-Commerce Platform',
+    required: true,
     maxLength: 100,
     icon: 'briefcase',
   },
@@ -61,6 +67,7 @@ const FORM_FIELDS: FormField[] = [
     key: 'description',
     label: 'Description',
     placeholder: 'Briefly describe your group or project...',
+    required: true,
     multiline: true,
     maxLength: 500,
     icon: 'align-left',
@@ -69,6 +76,7 @@ const FORM_FIELDS: FormField[] = [
     key: 'semester',
     label: 'Semester',
     placeholder: 'Select semester',
+    required: true,
     maxLength: 20,
     icon: 'calendar',
     isSelect: true,
@@ -77,6 +85,7 @@ const FORM_FIELDS: FormField[] = [
     key: 'github_repo_url',
     label: 'GitHub Repository',
     placeholder: 'Select or create a repository',
+    required: true,
     maxLength: 255,
     icon: 'github',
     isSelect: true,
@@ -85,6 +94,7 @@ const FORM_FIELDS: FormField[] = [
     key: 'jira_project_key',
     label: 'Jira Project Key',
     placeholder: 'e.g. ECOM',
+    required: true,
     maxLength: 50,
     icon: 'trello',
     isSelect: true,
@@ -175,6 +185,14 @@ const CreateGroupScreen = () => {
   const [newRepoName, setNewRepoName] = useState('');
   const [newRepoDesc, setNewRepoDesc] = useState('');
   const [creatingRepo, setCreatingRepo] = useState(false);
+
+  const isFormComplete =
+    !!formData.name?.trim() &&
+    !!formData.project_name?.trim() &&
+    !!formData.description?.trim() &&
+    !!formData.semester?.trim() &&
+    !!formData.github_repo_url?.trim() &&
+    !!formData.jira_project_key?.trim();
 
   // ── Load Current Semester ───────────────
 
@@ -300,16 +318,21 @@ const CreateGroupScreen = () => {
   // ── Create New Repository ───────────────
 
   const handleCreateRepo = async () => {
-    if (!newRepoName.trim()) {
-      showError('Repository name is required');
+    const parsed = createRepoSchema.safeParse({
+      name: newRepoName,
+      description: newRepoDesc,
+    });
+
+    if (!parsed.success) {
+      showError(getZodErrorMessage(parsed.error));
       return;
     }
 
     try {
       setCreatingRepo(true);
       const result = await createRepository({
-        name: newRepoName.trim(),
-        description: newRepoDesc.trim() || undefined,
+        name: parsed.data.name,
+        description: parsed.data.description,
       });
 
       // Add to local repos list
@@ -369,18 +392,28 @@ const CreateGroupScreen = () => {
   // ── Submit ──────────────────────────────────────
 
   const handleSubmit = async () => {
-    if (!formData.name?.trim()) {
-      showError('Group name is required');
+    const parsed = groupFormSchema.safeParse({
+      name: formData.name || '',
+      project_name: formData.project_name || '',
+      description: formData.description || '',
+      semester: formData.semester || '',
+      github_repo_url: formData.github_repo_url || '',
+      jira_project_key: formData.jira_project_key || '',
+    });
+
+    if (!parsed.success) {
+      showError(getZodErrorMessage(parsed.error));
       return;
     }
 
-    // Build clean payload (remove empty strings)
-    const payload: Record<string, string> = {};
-    for (const [key, value] of Object.entries(formData)) {
-      if (value?.trim()) {
-        payload[key] = value.trim();
-      }
-    }
+    const payload: Record<string, string> = {
+      name: parsed.data.name,
+      project_name: parsed.data.project_name,
+      description: parsed.data.description,
+      semester: parsed.data.semester,
+      github_repo_url: parsed.data.github_repo_url,
+      jira_project_key: parsed.data.jira_project_key,
+    };
 
     try {
       setSubmitting(true);
@@ -765,9 +798,11 @@ const CreateGroupScreen = () => {
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={handleCreateRepo}
-                    disabled={creatingRepo || !newRepoName.trim()}
+                    disabled={creatingRepo || !newRepoName.trim() || !newRepoDesc.trim()}
                     className={`flex-1 flex-row items-center justify-center gap-2 rounded-xl py-3.5 ${
-                      creatingRepo || !newRepoName.trim() ? 'bg-[#334155]' : 'bg-[#7C3AED]'
+                      creatingRepo || !newRepoName.trim() || !newRepoDesc.trim()
+                        ? 'bg-[#334155]'
+                        : 'bg-[#7C3AED]'
                     }`}>
                     {creatingRepo ? (
                       <ActivityIndicator size="small" color="#fff" />
@@ -779,7 +814,7 @@ const CreateGroupScreen = () => {
                     )}
                   </TouchableOpacity>
                 </View>
-              </View>
+                </View>
             ) : (
               // ── Repo List ──
               <>

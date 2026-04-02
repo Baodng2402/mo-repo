@@ -23,6 +23,7 @@ import {
   type DocumentSubmission,
 } from '@/services/documentService';
 import { showError, showSuccess } from '@/utils/toast';
+import { documentSubmissionSchema, getZodErrorMessage } from '@/utils/validation/formSchemas';
 
 const STATUS_COLOR: Record<string, string> = {
   PENDING: '#EAB308',
@@ -77,16 +78,22 @@ const DocumentSubmissionsScreen = () => {
   }, [fetchSubmissions]);
 
   const handleSubmit = useCallback(async () => {
-    if (!title.trim() || !url.trim()) {
-      showError('Title and URL are required');
+    const normalizedUrl = normalizeUrl(url);
+    const parsed = documentSubmissionSchema.safeParse({
+      title,
+      documentUrl: normalizedUrl,
+    });
+
+    if (!parsed.success) {
+      showError(getZodErrorMessage(parsed.error));
       return;
     }
 
     try {
       setSubmitting(true);
       await submitGroupDocument(groupId, {
-        title: title.trim(),
-        document_url: url.trim(),
+        title: parsed.data.title,
+        document_url: parsed.data.documentUrl,
       });
       setTitle('');
       setUrl('');

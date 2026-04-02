@@ -49,6 +49,7 @@ import { JIRA_STATUS_CONFIG } from '@/types/activity';
 import type { RootStackParamList } from '@/navigation/AppNavigator';
 import { debugLog } from '@/utils/debug/log';
 import { useUserStore } from '@/utils/stores/userStore';
+import { getZodErrorMessage, taskFormSchema } from '@/utils/validation/formSchemas';
 
 // ==================== Constants ====================
 
@@ -456,8 +457,15 @@ const GroupDetailScreen = () => {
   };
 
   const handleSaveTask = async () => {
-    if (!formTitle.trim()) {
-      setTaskFormError('Task title is required.');
+    const parsed = taskFormSchema.safeParse({
+      title: formTitle,
+      description: formDescription,
+      dueDate: formDueDate,
+      assigneeId: formAssigneeId ?? '',
+    });
+
+    if (!parsed.success) {
+      setTaskFormError(getZodErrorMessage(parsed.error));
       return;
     }
 
@@ -467,12 +475,12 @@ const GroupDetailScreen = () => {
 
       if (editingTask) {
         await updateTask(editingTask.id, {
-          title: formTitle.trim(),
-          description: formDescription.trim() || undefined,
+          title: parsed.data.title,
+          description: parsed.data.description,
           priority: formPriority,
           status: formStatus,
-          assignee_id: formAssigneeId ?? undefined,
-          due_at: formDueDate.trim() || undefined,
+          assignee_id: parsed.data.assigneeId,
+          due_at: parsed.data.dueDate,
         });
         showSuccess(
           group?.jira_project_key ? 'Task updated & synced to Jira' : 'Task updated successfully'
@@ -480,11 +488,11 @@ const GroupDetailScreen = () => {
       } else {
         await createTask({
           group_id: groupId,
-          title: formTitle.trim(),
-          description: formDescription.trim() || undefined,
+          title: parsed.data.title,
+          description: parsed.data.description,
           priority: formPriority,
-          assignee_id: formAssigneeId ?? undefined,
-          due_at: formDueDate.trim() || undefined,
+          assignee_id: parsed.data.assigneeId,
+          due_at: parsed.data.dueDate,
           // status intentionally omitted — BE auto-sets based on assignee
         });
         showSuccess(
@@ -1331,7 +1339,7 @@ const GroupDetailScreen = () => {
             />
 
             {/* Description */}
-            <Text className="mb-1 text-xs text-gray-400">Description</Text>
+            <Text className="mb-1 text-xs text-gray-400">Description *</Text>
             <TextInput
               value={formDescription}
               onChangeText={setFormDescription}
@@ -1345,7 +1353,7 @@ const GroupDetailScreen = () => {
 
             {/* Assignee picker */}
             <Text className="mb-2 text-xs text-gray-400">
-              Assign to
+              Assign to *
               {!editingTask && (
                 <Text className="text-gray-600"> · status auto-set by assignee</Text>
               )}
@@ -1423,7 +1431,7 @@ const GroupDetailScreen = () => {
             </View>
 
             {/* Due Date */}
-            <Text className="mb-1 text-xs text-gray-400">Due Date</Text>
+            <Text className="mb-1 text-xs text-gray-400">Due Date *</Text>
             <TouchableOpacity
               onPress={() => setDueDatePickerVisible(true)}
               activeOpacity={0.7}
