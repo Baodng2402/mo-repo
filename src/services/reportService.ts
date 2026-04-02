@@ -47,9 +47,7 @@ const mapCommitsToContributors = (authors: string[]): CommitContributor[] => {
     .sort((a, b) => b.commits - a.commits);
 };
 
-const parseGithubOwnerRepo = (
-  githubUrl?: string
-): { owner: string; repo: string } | null => {
+const parseGithubOwnerRepo = (githubUrl?: string): { owner: string; repo: string } | null => {
   if (!githubUrl) return null;
 
   const match = githubUrl.match(/github\.com\/([^/]+)\/([^/?#]+)/i);
@@ -70,7 +68,6 @@ export const generateSrsReport = async (groupId: string): Promise<SrsReport> => 
   return response.data;
 };
 
-
 /**
  * Get GitHub commit contribution report for a group.
  * GET /api/reports/commits/:groupId
@@ -87,10 +84,7 @@ export const getCommitReport = async (groupId: string): Promise<CommitReport> =>
 
     // Fallback for environments where commit report generation is not ready
     // or temporarily fails due integration token issues.
-    const [group, repos] = await Promise.all([
-      getGroupById(groupId),
-      getGroupRepos(groupId),
-    ]);
+    const [group, repos] = await Promise.all([getGroupById(groupId), getGroupRepos(groupId)]);
 
     const repoReports: CommitRepositoryReport[] = [];
 

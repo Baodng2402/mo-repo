@@ -1,116 +1,91 @@
-# JiHub App
+# JiHub Mobile App
 
-A React Native application built with Expo and NativeWind (TailwindCSS).
+React Native + Expo mobile app for semester/group collaboration, task tracking, and realtime chat.
 
-## 📋 Prerequisites
+## Prerequisites
 
-- **Node.js** >= 18.x
-- **npm** or **yarn**
-- **Expo CLI** (automatically installed when running the project)
-- A phone with **Expo Go** app or an emulator (Android/iOS)
+- Node.js 18+
+- npm 9+
+- Xcode (iOS) / Android Studio (Android)
+- Expo CLI via project scripts
 
-## 🚀 Installation & Running
-
-### 1. Install dependencies
+## Quick Start
 
 ```bash
 npm install
-```
-
-### 2. Run the application
-
-**Run on Expo Go (recommended for development):**
-
-```bash
 npm start
 ```
 
-Then scan the QR code using Expo Go app (Android) or Camera (iOS).
-
-**Run on Android:**
+Run platform builds:
 
 ```bash
 npm run android
-```
-
-**Run on iOS:**
-
-```bash
 npm run ios
-```
-
-**Run on Web:**
-
-```bash
 npm run web
 ```
 
-## 📁 Project Structure
+## Quality Commands
 
-```
-mo-repo/
-├── App.tsx              # Application entry point
-├── app.json             # Expo configuration
-├── assets/              # Images, fonts, icons
-├── components/          # Reusable components
-├── global.css           # TailwindCSS styles
-├── tailwind.config.js   # TailwindCSS configuration
-├── babel.config.js      # Babel configuration
-├── metro.config.js      # Metro bundler configuration
-└── tsconfig.json        # TypeScript configuration
+```bash
+npm run lint
+npm run typecheck
+npm run check
+npm run format
 ```
 
-## 🛠️ Available Scripts
+- `lint`: ESLint + Prettier check.
+- `typecheck`: TypeScript compile check without emit.
+- `check`: full local quality gate (`typecheck` + `lint`).
+- `format`: auto-fix lint and format issues.
 
-| Script             | Description                           |
-| ------------------ | ------------------------------------- |
-| `npm start`        | Start Expo dev server                 |
-| `npm run android`  | Run on Android device/emulator        |
-| `npm run ios`      | Run on iOS simulator                  |
-| `npm run web`      | Run on web browser                    |
-| `npm run lint`     | Check code with ESLint and Prettier   |
-| `npm run format`   | Auto-format code                      |
-| `npm run prebuild` | Generate native project (Android/iOS) |
+## Tech Stack
 
-## 📱 Running on Physical Device
+- Expo `~52.0.0`
+- React Native `0.76.9`
+- React `18.3.1`
+- TypeScript `~5.3.3`
+- Zustand + AsyncStorage
+- NativeWind
+- Axios + Socket.IO client
 
-1. Install **Expo Go** app from App Store or Google Play
-2. Run `npm start`
-3. Scan the QR code displayed in the terminal
+## High-Level Structure
 
-## ⚙️ Tech Stack
+```text
+src/
+	api/           # HTTP client + endpoint constants
+	services/      # API/service layer and data normalization
+	screens/       # UI screens (auth/main)
+	navigation/    # App and tab navigation
+	utils/stores/  # Zustand stores (auth/chat)
+	hooks/         # Lifecycle hooks
+	types/         # Shared type contracts
+```
 
-- **Expo** ~54.0.0
-- **React Native** 0.81.5
-- **React** 19.1.0
-- **NativeWind** (TailwindCSS for React Native)
-- **TypeScript**
-- **ESLint** + **Prettier**
+## Team Workflow
 
-## 🔧 Troubleshooting
+- Engineering process: [docs/engineering-workflow.md](docs/engineering-workflow.md)
+- Code readability guide: [docs/code-style-guide.md](docs/code-style-guide.md)
+- Chat integration notes: [docs/mobile-chat-integration.md](docs/mobile-chat-integration.md)
+- Manual QA checklist: [docs/mobile-chat-manual-qa.md](docs/mobile-chat-manual-qa.md)
 
-### Cache errors
+## CI
+
+GitHub Actions quality workflow:
+- [.github/workflows/mobile-quality.yml](.github/workflows/mobile-quality.yml)
+
+It runs `npm run lint` and `npm run typecheck` on pull requests and pushes to `main`.
+
+## Troubleshooting
+
+Reset Expo cache:
 
 ```bash
 npx expo start --clear
 ```
 
-### Reinstall dependencies
+Clean install:
 
 ```bash
-rm -rf node_modules
+rm -rf node_modules package-lock.json
 npm install
 ```
-
-### Reset Metro cache
-
-```bash
-npx expo start -c
-```
-
----
-
-## 📝 Notes
-
-- Use `className` for styling with NativeWind (similar to TailwindCSS)
-- Expo Go doesn't support all native modules, use `prebuild` if you need native code

@@ -46,6 +46,10 @@ const ENDPOINTS = {
   JIRA: {
     PROJECTS: '/api/jira/projects',
     LINK_PROJECT: '/api/jira/projects/link',
+    PROJECT_ACCESS: (projectKey: string) =>
+      `/api/jira/projects/${encodeURIComponent(projectKey)}/access`,
+    PROJECT_ASSIGNABLE: (projectKey: string) =>
+      `/api/jira/projects/${encodeURIComponent(projectKey)}/assignable`,
   },
 
   TOPICS: {
@@ -53,6 +57,15 @@ const ENDPOINTS = {
     AVAILABLE: '/api/topics/available',
     AI_GENERATE: '/api/topics/ai/generate',
     AI_CREATE: '/api/topics/ai/create',
+  },
+
+  EVALUATIONS: {
+    LIST: '/api/evaluations',
+    CREATE: '/api/evaluations',
+    DETAIL: (id: string) => `/api/evaluations/${id}`,
+    UPDATE: (id: string) => `/api/evaluations/${id}`,
+    DELETE: (id: string) => `/api/evaluations/${id}`,
+    MY_CONTRIBUTION: (id: string) => `/api/evaluations/${id}/my-contribution`,
   },
 
   TASKS: {
@@ -73,9 +86,25 @@ const ENDPOINTS = {
     SUBMIT_FOR_GROUP: (groupId: string) => `/api/documents/group/${groupId}`,
   },
 
+  SEMESTERS: {
+    CURRENT: '/api/semesters/current',
+    CURRENT_WEEK: '/api/semesters/current-week',
+    STUDENT_WARNINGS: '/api/semesters/current/compliance/student-warning',
+    STUDENT_REVIEW_STATUS: '/api/semesters/current/reviews/student-status',
+  },
+
   NOTIFICATIONS: {
     LIST: '/api/notifications',
     MARK_READ: (id: string) => `/api/notifications/${id}/read`,
+  },
+
+  CHAT: {
+    LIST_CONVERSATIONS: '/api/chat/conversations',
+    CREATE_CONVERSATION: '/api/chat/conversations',
+    CONVERSATION_DETAIL: (conversationId: string) => `/api/chat/conversations/${conversationId}`,
+    LIST_MESSAGES: (conversationId: string) => `/api/chat/conversations/${conversationId}/messages`,
+    SEND_MESSAGE: (conversationId: string) => `/api/chat/conversations/${conversationId}/messages`,
+    MARK_READ: (conversationId: string) => `/api/chat/conversations/${conversationId}/read`,
   },
 
   PROJECT: {

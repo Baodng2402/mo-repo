@@ -30,8 +30,8 @@ export const getJiraProjects = async (): Promise<JiraProject[]> => {
   const response = await axiosClient.get<JiraProject[] | JiraProjectsWrappedResponse>(
     ENDPOINTS.JIRA.PROJECTS,
     {
-    expectedErrorStatuses: [400],
-    } as any,
+      expectedErrorStatuses: [400],
+    } as any
   );
 
   const payload = response.data;
@@ -40,6 +40,38 @@ export const getJiraProjects = async (): Promise<JiraProject[]> => {
   }
 
   return payload?.values || payload?.data || payload?.projects || [];
+};
+
+/**
+ * Check if the current user has access to a Jira project.
+ * GET /api/jira/projects/:projectKey/access
+ */
+export const checkJiraProjectAccess = async (projectKey: string): Promise<boolean> => {
+  try {
+    const response = await axiosClient.get<{ has_access: boolean }>(
+      ENDPOINTS.JIRA.PROJECT_ACCESS(projectKey),
+      { expectedErrorStatuses: [400, 401, 403, 404] } as any
+    );
+    return response.data?.has_access === true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Check if the current user can be assigned Jira issues in a project.
+ * GET /api/jira/projects/:projectKey/assignable
+ */
+export const checkJiraProjectAssignable = async (projectKey: string): Promise<boolean> => {
+  try {
+    const response = await axiosClient.get<{ assignable: boolean }>(
+      ENDPOINTS.JIRA.PROJECT_ASSIGNABLE(projectKey),
+      { expectedErrorStatuses: [400, 401, 403, 404] } as any
+    );
+    return response.data?.assignable === true;
+  } catch {
+    return false;
+  }
 };
 
 /**

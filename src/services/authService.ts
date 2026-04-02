@@ -61,7 +61,10 @@ const normalizeUserProfile = (raw: RawUserProfile): UserProfile => ({
   updatedAt: raw.updatedAt ?? raw.updated_at ?? '',
 });
 
-const normalizeAuthResponse = (raw: { user: RawUserProfile; access_token: string }): AuthResponse => ({
+const normalizeAuthResponse = (raw: {
+  user: RawUserProfile;
+  access_token: string;
+}): AuthResponse => ({
   access_token: raw.access_token,
   user: normalizeUserProfile(raw.user),
 });
@@ -80,7 +83,7 @@ export interface LinkedAccount {
 export const login = async (payload: LoginPayload): Promise<AuthResponse> => {
   const response = await axiosClient.post<{ user: RawUserProfile; access_token: string }>(
     ENDPOINTS.AUTH.LOGIN,
-    payload,
+    payload
   );
   return normalizeAuthResponse(response.data);
 };
