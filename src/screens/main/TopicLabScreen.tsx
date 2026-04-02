@@ -25,6 +25,7 @@ import {
   type TopicIdeaMode,
   type TopicItem,
 } from '@/services/topicService';
+import { getZodErrorMessage, topicGenerateSchema } from '@/utils/validation/formSchemas';
 
 const MAX_GENERATE_RETRIES = 2;
 
@@ -91,13 +92,21 @@ const TopicLabScreen = () => {
   );
 
   const handleGenerateDraft = async () => {
-    if (mode === 'REFINE' && !seedName.trim()) {
-      showError('Seed topic is required in refine mode');
+    const parsed = topicGenerateSchema.safeParse({
+      seedName,
+      projectDomain,
+      teamContext,
+      problemSpace,
+      primaryActorsHint,
+    });
+
+    if (!parsed.success) {
+      showError(getZodErrorMessage(parsed.error));
       return;
     }
 
     const buildPayload = (attempt: number): GenerateTopicIdeaPayload => {
-      const baseTeamContext = teamContext.trim();
+      const baseTeamContext = parsed.data.teamContext;
       const attemptHint =
         attempt > 0
           ? `Please provide a clearly distinct topic variation (attempt ${attempt + 1}).`
@@ -107,11 +116,11 @@ const TopicLabScreen = () => {
 
       return {
         mode,
-        seed_name: seedName.trim() || undefined,
-        project_domain: projectDomain.trim() || undefined,
+        seed_name: parsed.data.seedName,
+        project_domain: parsed.data.projectDomain,
         team_context: refinedTeamContext || undefined,
-        problem_space: problemSpace.trim() || undefined,
-        primary_actors_hint: primaryActorsHint.trim() || undefined,
+        problem_space: parsed.data.problemSpace,
+        primary_actors_hint: parsed.data.primaryActorsHint,
       };
     };
 
@@ -236,9 +245,7 @@ const TopicLabScreen = () => {
             </TouchableOpacity>
           </View>
 
-          <Text className="mb-1 text-xs text-gray-400">
-            Seed Topic {mode === 'REFINE' ? '*' : '(optional)'}
-          </Text>
+          <Text className="mb-1 text-xs text-gray-400">Seed Topic *</Text>
           <TextInput
             value={seedName}
             onChangeText={setSeedName}
@@ -247,7 +254,7 @@ const TopicLabScreen = () => {
             className="mb-3 h-11 rounded-xl bg-[#243447] px-4 text-sm text-white"
           />
 
-          <Text className="mb-1 text-xs text-gray-400">Project Domain (optional)</Text>
+          <Text className="mb-1 text-xs text-gray-400">Project Domain *</Text>
           <TextInput
             value={projectDomain}
             onChangeText={setProjectDomain}
@@ -256,7 +263,7 @@ const TopicLabScreen = () => {
             className="mb-3 h-11 rounded-xl bg-[#243447] px-4 text-sm text-white"
           />
 
-          <Text className="mb-1 text-xs text-gray-400">Team Context (optional)</Text>
+          <Text className="mb-1 text-xs text-gray-400">Team Context *</Text>
           <TextInput
             value={teamContext}
             onChangeText={setTeamContext}
@@ -265,7 +272,7 @@ const TopicLabScreen = () => {
             className="mb-3 h-11 rounded-xl bg-[#243447] px-4 text-sm text-white"
           />
 
-          <Text className="mb-1 text-xs text-gray-400">Problem Space (optional)</Text>
+          <Text className="mb-1 text-xs text-gray-400">Problem Space *</Text>
           <TextInput
             value={problemSpace}
             onChangeText={setProblemSpace}
@@ -277,7 +284,7 @@ const TopicLabScreen = () => {
             className="mb-3 min-h-[84px] rounded-xl bg-[#243447] px-4 py-3 text-sm text-white"
           />
 
-          <Text className="mb-1 text-xs text-gray-400">Primary Actors Hint (optional)</Text>
+          <Text className="mb-1 text-xs text-gray-400">Primary Actors Hint *</Text>
           <TextInput
             value={primaryActorsHint}
             onChangeText={setPrimaryActorsHint}

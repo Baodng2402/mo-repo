@@ -19,6 +19,7 @@ import { addMember } from '@/services/groupService';
 import { showSuccess, showError } from '@/utils/toast';
 import type { RootStackParamList } from '@/navigation/AppNavigator';
 import type { MembershipRole } from '@/types/group';
+import { addMemberSchema, getZodErrorMessage } from '@/utils/validation/formSchemas';
 
 // ==================== Constants ====================
 
@@ -42,16 +43,16 @@ const AddMemberScreen = () => {
   // ── Submit ──────────────────────────────────────
 
   const handleSubmit = async () => {
-    const trimmedId = userId.trim();
-    if (!trimmedId) {
-      showError('User ID is required');
+    const parsed = addMemberSchema.safeParse({ userId });
+    if (!parsed.success) {
+      showError(getZodErrorMessage(parsed.error));
       return;
     }
 
     try {
       setSubmitting(true);
       await addMember(groupId, {
-        user_id: trimmedId,
+        user_id: parsed.data.userId,
         role_in_group: selectedRole,
       });
       showSuccess('Member added successfully');

@@ -21,6 +21,7 @@ import { useUserStore } from '../../utils/stores/userStore';
 import { login } from '../../services/authService';
 import { showError, showSuccess } from '../../utils/toast';
 import { Eye, EyeOff } from 'lucide-react-native';
+import { getZodErrorMessage, signInSchema } from '@/utils/validation/formSchemas';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignIn'>;
 
@@ -44,8 +45,14 @@ const SignInScreen = ({ navigation }: Props) => {
   }, [fadeAnim, slideAnim]);
 
   const handleSignIn = async () => {
+    const parsed = signInSchema.safeParse({ email, password });
+    if (!parsed.success) {
+      showError(getZodErrorMessage(parsed.error), 'Login Failed');
+      return;
+    }
+
     try {
-      const data = await login({ email, password });
+      const data = await login(parsed.data);
       await saveUserToStore(data);
 
       const savedToken = await getAccessToken();

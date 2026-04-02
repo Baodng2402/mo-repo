@@ -21,6 +21,7 @@ import { debugLog } from '@/utils/debug/log';
 import { login, register } from '../../services/authService';
 import { showError, showInfo } from '../../utils/toast';
 import { useUserStore } from '../../utils/stores/userStore';
+import { getZodErrorMessage, signUpSchema } from '@/utils/validation/formSchemas';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
 
@@ -63,16 +64,27 @@ const SignUpScreen = ({ navigation }: Props) => {
   };
 
   const handleSignUp = async () => {
-    if (!email || !password || !fullName || !studentId) {
-      showInfo('Thiếu thông tin', 'Vui lòng điền đầy đủ các trường.');
+    const parsed = signUpSchema.safeParse({
+      fullName,
+      studentId,
+      email,
+      password,
+    });
+
+    if (!parsed.success) {
+      showInfo('Invalid Input', getZodErrorMessage(parsed.error));
       return;
     }
+
     try {
       setIsLoading(true);
       // Step 1: Register the account
-      await register({ email, password, fullName, studentId });
+      await register(parsed.data);
       // Step 2: Auto-login to get token + user profile
-      const authData = await login({ email, password });
+      const authData = await login({
+        email: parsed.data.email,
+        password: parsed.data.password,
+      });
       await saveUserToStore(authData);
 
       const savedToken = await getAccessToken();
